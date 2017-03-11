@@ -131,7 +131,6 @@ you can keep tinkering even if the object isn't in the room with you.
 		
 &f.format.pose.attribute [v( d.pom )]=
 	strcat( d., pose., secs()., %0 )
-	)
 	
 &f.format.pose.data 	[v( d.pom )]=
 	strcat( secs()., %0	)
