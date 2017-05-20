@@ -1,0 +1,472 @@
+/*
+
+The Repose Reposer is for TinyMUX. It creates the +repose commands, which lets the user see the last 30 minutes (default) worth of poses in the room they are in. This is great for if you spam yourself, or get disconnected, or enter a scene late and miss the set.
+
+Repose can be turned off in any room by staff, or in player-owned rooms by the player, or in any room temporarily.
+
+Repose will also emit to a channel when it is used - this is prevent the possible abuse of a player stepping into a private scene, using repose, and leaving.
+
+The RR assumes you have a hook object. Which you should have.
+
+Please process the below code through Muxify: http://muxify.musoapbox.net/editor.html
+(To use Muxify on Windows, use Firefox. It doesn't work on anything else.)
+
+And yes, I use @@ and // to comment stuff. That's how I roll.
+
+Note: The reposer uses secure() on the incoming poses, because I had too many issues without it. This strips out a few characters, like commas and parentheses. 
+
+*/
+
+
+@create Repose Reposer <rr>
+@set Repose Reposer <rr>=inherit safe
+@fo me=&d.rr me=search( name=Repose Reposer <rr> )
+@fo me=&d.ho me=search( name=@hook object <ho> )
+
+@@ Move object to master room. Don't use this if it shouldn't go there...
+
+@tel [v( d.rr )]=[config(master_room)]
+
+@fo me=&d.ho [v( d.rr )]=search( name=@hook object <ho> )
+@fo me=&d.rr [v( d.ho )]=v( d.rr )
+
+@desc [v( d.rr )]=[header( Repose Reposer <rr> )] 
+	%r%rPlease use +repose/help for help! 
+	%r%rThis thing was made by skew. %r%r[footer( +repose )]
+
+@@ This formats messages with an ansi highlight so you don't have to define that constantly.
+@@ To use it, it's like u( .msg, Title, Message ) and it outputs "<Title> Message"
+
+&.msg [v( d.rr )]=ansi( h, <%0>, n, %b%1 )
+
+@@ Settings:
+
+@@ How long it holds previous poses. Default = 30 min
+&d.repose.preserve [v( d.rr )]=1800
+
+&d.exclude.rooms [v( d.rr )]=@@( Adding this here so you know it's here. Code will set it when needed. )
+
+@@ Note: There's a feature that outputs use of the +repose command to a com channel.
+@@ The idea is that if anyone pops into your temp room and uses repose to "spy" on
+@@ you, staff will be able to see that. Below is the d.data that sets the name of the
+@@ room. You can use an existing one, if you want. Otherwise, create a new one.
+@@ At the very bottom is a sample for creating a new com channel.
+
+&d.com.channel [v( d.rr )]=Repose Monitor
+
+@@ For the hook object...
+
+@edit [v( d.ho )]/B_POSE = $, [u( [v( d.rr )]/f.capture.pose, %m )]]
+@edit [v( d.ho )]/B_POSE/NOSPACE = $, [u( [v( d.rr )]/f.capture.pose, %m )]
+@edit [v( d.ho )]/B_NPOSE = $, [u( [v( d.rr )]/f.capture.pose, %m )]
+@edit [v( d.ho )]/B_SAY = $, [u( [v( d.rr )]/f.capture.pose, %m )]
+@edit [v( d.ho )]/B_NSAY = $, [u( [v( d.rr )]/f.capture.pose, %m )]
+@edit [v( d.ho )]/B_@EMIT = $, [u( [v( d.rr )]/f.capture.pose, %m )]
+
+@@ This is the CRON stuff. It is looking for 'CRON' for the name of the object.
+@@ Please make sure there's something to find. If not, manually set &d.cron me=#dbref
+
+@fo me=&d.cron me=search( name=Cron )
+
+@fo me=&jobs_5minute [v( d.cron )]=[ strcat( get( [v( d.cron )]/jobs_5minute ), %b, [v( d.rr )]/trig.find.old )]
+
+&cron_time_5minute [v( d.cron )]=||||00 05 10 15 20 25 30 35 40 45 50 55|
+
+&cron_job_5minute [v( d.cron )]=@dol [v( jobs_5minute )]=@trigger ##
+
+
+
+/*
+
+The capture pose is the workhorse function. Each time it fires, it will check to see if
+repose is on/off (can have an in-room flag or be set on the repose reposer) and then
+process the pose. It will check what kind of pose it is (say vs @emit, for instance) and
+then format it accordingly.
+
+Poses are stored on the room object itself. Poses remain until they time out, or until
+they are cleared, or until the room is empty.
+
+Variables:
+
+	u: unedited pose (which really makes no sense, because it's "secured" at that point)
+	c: grab the first character of the data sent
+	f: grab the first word sent
+	e: process the unedited pose to determine how to format it
+
+The switch that processes the e variable is very ugly. Basically, it checks if the first
+character is one of the 4 ways to pose/speak. If it's not, it moves to capture the first word
+(like @emit or pose). Then it passes that off to a function that formats the "pose" properly,
+which mostly means adding "Character says, "Stuff"." where necessary.
+
+	
+*/
+
+@@ Capture the pose, store as attribute on room object.
+@@ This is ugly. Oh well.
+
+&f.capture.pose [v( d.rr )]=
+	strcat(
+		setq( l, loc( %# ) ),
+		if( cor( 
+			match( u( d.exclude.rooms ), %ql ), 
+// check exclude room list
+			match( get( %ql/_REPOSE ), off ), 
+// check setting on local room 
+			), @@( If on the no list do nothing else process rest of this ),
+		strcat(
+			setq( u, u( f.secure.pose, [secure( %0 )] ) ),
+			setq( c, strtrunc( %0, 1) ),
+			setq( f, first( %0 ) ),
+			setq( e, switch( %qc,
+				:, u( f.format.repose, rest( %qu, : ), pose ),
+				;, u( f.format.repose, rest( %qu, ; ), pose.ns ),
+				", u( f.format.repose, rest( %qu, " ), say ),
+				\, u( f.format.repose, rest( %qu, \ ), emit ),
+				switch( 1,
+					strmatch( %qf, po* ), u( f.format.repose, rest( %qu ), pose ),
+					strmatch( %qf, sa* ), u( f.format.repose, rest( %qu ), say ),
+					strmatch( %qf, @em* ), u( f.format.repose, rest( %qu ), emit ),
+					strmatch( %qf, @re* ), u( f.format.repose, rest( %qu ), emit ),
+					Why is this failing? ) ) ),	
+// This long nasty bit tries to figure out how you posed. Ie, " or @em or etc
+			set( %ql, 
+				u( f.format.repose.attribute, %# ):
+				[u( f.format.repose.data, %qe )] )
+// add that you posed 
+				) 
+			)
+	)
+
+@@ This one will edit the pose and store it appropriately. "stuff gets turned into
+@@ Character says, "Stuff"
+@@ ns means 'no space' because bluh
+
+&f.format.repose [v( d.rr )]=switch( %1,
+	pose, strcat( name( %# ), %b, %0 ),
+	pose.ns, strcat( name( %# ), %0 ),
+	say, strcat( name( %# ), %b, says ", %0, " ),
+	emit, %0,
+	%0 )
+
+@@ Everything has already been secure()'d at this point. This further removes
+@@ | and ~ becuase they're used elsewhere, along with []
+&f.secure.pose [v( d.rr )]=edit( %0 , lit( [ ), , lit( ] ), , |, , ~,  )
+
+@@ how the attribute itself will appear
+@@ should look like d.repose.190328093.character
+&f.format.repose.attribute [v( d.rr )]=
+	strcat( d., repose., secs()., %0 )
+
+@@ Do I want to add more to the pose data?	
+&f.format.repose.data [v( d.rr )]=%0
+
+@@ Clearing the list! Clears after x minutes, or when the room is empty.
+
+@@ Puts poses in order, outputs: time.player.pose
+@@ This is used in the sweeps just because it was used in other code.
+@@ Output is like: secs.dbref|pose~ ... so:
+@@ 1208958.#289|This is my pose.~10982098.#202|This is another pose.
+
+&f.order.poses [v( d.rr )]=
+	strcat(
+		setq( o, sort( iter( lattr( %0/d.repose.* ), ##, , ~) ) ),
+		iter( %qo, strcat(
+			elements( ##, 3 4, . ), |, get( %0/## ) ), ~, ~ )
+// List of who posed is stored on room object 
+	)
+
+@@ Searches for rooms with the d.repose.* attrib
+	
+&trig.find.old [v( d.rr )]=
+	th strcat(
+		setq( r, search( eroom=lattr( ##/d.repose.* ))),
+		iter( %qr, trigger( %!/trig.clear.old, ## ) )
+	)
+
+@@ takes list of rooms and compares time stamp to current, wipes if
+@@ older than d.repose.preserve.
+@@ Also, if room is empty, wipes the "repose off" setting in temp rooms
+
+&trig.clear.old [v( d.rr )]=
+	th strcat(
+		setq( r, %0 ),
+		setq( o, u( f.order.poses, %qr ) ),
+		iter( %qo, strcat(
+			setq( t, first( ##, . ) ), @@( Get the time. ),
+			setq( p, first( elements( ##, 2, . ), | ) ), @@( Get the player dbref ),
+			if( gte( sub( secs(), %qt ), u( d.repose.preserve ) ),
+				wipe( %qr/d.repose.%qt.%qp ) )
+			), ~ ),
+		if( t( lcon( %qr, connect) ), 
+			@@( If occupied, do nothing ),
+			wipe( %qr/d.repose.* ) ),
+		if( cand( 
+				t( lcon( %qr, connect) ), 
+				not( hasattr( %qr, _REPOSE.TEMP ) ) ),
+			@@( If occupied and/or isn't a temp room, do nothing ),
+			wipe( %qr/_REPOSE* ) )
+	)
+
+/*
+
+Display stuff! This is just formatting for the output. It should look like:
+
+-- Header --
+
+Bob posed at 11:32:
+
+	This is bob's pose here.
+
+Beth posed at 11:34
+
+	Beth says, "Thanks, me too."
+
+*/
+
+@@ @@@@@@@@@@@@@@@@
+@@ Output for the +repose command
+@@ @@@@@@@@@@@@@@@@	
+
+@@ This one checks if room is on exclude list, then if room is off
+@@ Then checks if there are poses, and if there are, outputs poses
+	
+&disp.repose [v( d.rr )]=
+	strcat( @@( This pulls the list of reposers and displays it. Nbd.),
+		case( 1, 
+			t( match( u( d.exclude.rooms ), %0 ) ), strcat(
+				ljust( ,10), ljust( This room is [ansi( hr, excluded )] from +repose., 60 ), %r,
+				ljust( ,10), ljust( If +repose should be on%, please contact staff., 60), %r%r ),
+// If it's excluded, exclude it.
+			and( 
+				strmatch( get( %0/_REPOSE ), off ), 
+				strmatch( get( %0/_REPOSE.TEMP ), temp) ),
+			strcat(
+				ljust( ,10), ljust( Repose is [ansi( hr, temporarily off, n, . )] , 60 ), %r, ),
+// Display temporary off-ness
+			strmatch( get( %0/_REPOSE ), off ), 
+			strcat(
+				ljust( ,10), ljust( The owner of this room has turned +repose [ansi( hr, off, n, . )] , 60 ), %r, ),
+// If it's on, check if any poses. If so, display.
+			strcat(
+					setq( o, u( f.order.poses, %0 ) ),
+					if( not( %qo ), strcat(
+						ljust( ,10), ljust( No one has posed yet., 40 ), %r%r ),
+						iter( %qo, u( disp.format.repose, ## ), ~, %r ) )
+					)
+			)
+	)
+
+@@ Grabs the individual pose and processes it. Basically takes
+@@ 12089.name.pose and makes it: Name posed at time: <pose>	
+	
+&disp.format.repose	[v( d.rr )]=
+	strcat(
+		setq( t, timefmt( $H:$M, first( %0, . ) ) ),
+		setq( p, first( elements( %0, 2, . ), | ) ),
+		setq( w, last( %0, | ) ),
+		name(%qp)%b,posed at %qt:, %r%t, %qw, %r )
+
+/*
+
+=============================
+== Commands ============
+
++repose : display the current repose
++repose/option : Clear, turn on/off, exclude
+
+Options:
+
+* <null> : display the repose. Note that we are adding in some output for this, meant to go to a monitor channel. There's some concern about players entering "private" scenes and using this command to "spy" on people, OOCly and wrongly. So whenever someone view Repose, it should send who did it and the room they're in to the com channel.
+* /clear : Clears the repose. Can be used for whatever reason. It will display to the room it's happening -- if someone keeps clearing repose for some reason, hit them with a brick.
+* /here <on/off> : Staff or room owner can turn off repose for the room.
+* /exclude <here/dbref/!dbref> : Update the norepose object for rooms that should be excluded. Faster than having to go to each room individually.
+
+*/
+
+@@ Mistress command. Captures +repose(anything else).
+
+@@ Need to add a way to temporary turn it off, for temp rooms. If
+@@ you're in public, it's on, that's fine. Or staff can turn it off
+@@ but temp rooms CAN be primary. Maybe turn it off, then if off and
+@@ room is empty, clear off flag?
+
+&c.repose [v( d.rr )]=$^\+?repose([\s\S]+)?$:@pemit %#=
+	[setq( 0, secure( %1 ))]
+	[switch( %q0, 
+		, u( f.display.repose, loc( %# ), %# ),
+		/help, u( disp.help ),
+		/clear, u( f.repose.clear.here, loc( %# ), %# ),
+		/here *, u( f.repose.switch.here, trim(rest( %q0 )), loc( %# ), %# ),
+		/exclude *, u( f.repose.exclude, trim(rest( %q0 )), loc( %# ), %# ),
+		u( .msg, +Repose, Please see +repose/help. )
+	)]
+	
+@set [v( d.rr )]/c.repose=regex
+
+@@ Outputs the list of reposes. Emits to the monitor channel because there are some concerns that players will use this to "spy" on other players, by entering their private scene, using +repose, then leaving.
+
+&f.display.repose [v( d.rr )]=
+	strcat(
+		header(Recent poses as of [timefmt( $H:$M, secs() )]%, server time.),
+		%r%r,
+		u( disp.repose, %0, %1 ), %r,
+		footer(+repose),
+		cemit( [v(d.com.channel)], 
+			[name( %1 )] has checked +repose in "[name( %0 )] - <%0>" at [time()]. )
+	)
+	
+@@ Runs a wipe() and then room emits it's been done.
+	
+&f.repose.clear.here [v( d.rr )]=
+	strcat(
+		wipe( %0/d.repose.* ), @@( clear all previous poses ),
+		remit( %0, u( .msg, +Repose, [name( %1 )] has cleared the repose list. ) )
+	)
+	
+@@ Turn on/off for the room you're in.
+@@ 0 = input, 1 = room, 2 = who invoked command, l = room
+@@ a = checking for matches, should only accept on, off, temp.
+@@ Temp off gets erased (reset) when room is empty
+	
+&f.repose.switch.here [v( d.rr )]=
+	strcat(
+		setq( l, %1 ),
+		setq( a, case( %0,
+			on, on,
+			off, off,
+			temp, temp,
+			error )),
+		case( 1, 
+			cor( match( %2, owner( %ql )), isstaff( %2 ) ), 
+			@@( If you are staff or owner leave variable as is else change it to trigger error msg ),
+			setq( a, error2 )
+		),
+		case( %qa,
+			error, u( .msg, +Repose, Error: Please choose 'on' or 'off' or 'temp' ),
+			error2, u( .msg, +Repose, Error: You do not own this room! See +repose/help ),
+			temp, strcat(
+				if( t( get( %ql/_REPOSE ) ),
+// If there is anything listed as "_REPOSE"...
+					strcat(
+						setq( s, on )
+						[wipe( %ql/_REPOSE* )] ),
+// Then clear whatever is listed. No attribute = defaults to on
+					strcat(
+						setq( s, off ),
+						set( %ql, _REPOSE:off ),
+						set( %ql, _REPOSE.TEMP:temp )
+// If there is nothing, then turn it off, and mark it temp.
+					)
+				),
+				remit( %ql, [u( .msg, +Repose, Repose is [if( strmatch( %qs, off), temporarily off., on. )] )] )
+			),
+			strcat( 
+				set( %1, _REPOSE:%qa ),
+				remit( %1, [u( .msg, +Repose, +Repose is now [ucstr( %qa )]. )] )
+			) )
+	)
+
+
+@@ Turn on/off for a specific room
+@@ 0 = input, 1 = room, 2 = who invoked command, l = room
+	
+&f.repose.exclude [v( d.rr )]=
+	strcat(
+		setq( a, if( match( %0, here), %1, %0) ), @@( If here grab that loc else process the dbref ),
+		setq( d, u( d.exclude.rooms ) ),
+		case( 1,
+			not( isstaff( %2 )), u( .msg, +Repose, Only staff may exclude rooms. See +repose/help ),
+			match( %qa, list ), strcat(
+				@@( Display what rooms are currently excluded. ),
+				header( Excluded Rooms ),%r%r,
+				center( If this is empty%, it means there are none., 78 ), %r,
+				center( Please note%, this does not find rooms set with '/here off'., 78 ), %r%r,
+				iter( %qd, center( strcat( name( ## ), %b, <##>), 78 ), ,%r ), %r%r,
+				footer( +repose/exclude list )
+				),
+			match( %qa, !* ), strcat(
+				@@( ! means 'take off list', so !#404 removes #404 ),
+				setq( r, edit( %qa, !, ) ),
+				if( match( %qd, %qr),
+					strcat(
+						set( %!, d.exclude.rooms:[remove( %qd, %qr)]),
+						u( .msg, +repose, Removing [name( %qr )] <%qr> from exclude rooms list. ),
+					),
+					u( .msg, +repose, No such dbref found on the exclude rooms list. ) )
+				),
+			hastype( %qa, room ), 
+				if( match( %qd, %qa ),
+					u( .msg, +Repose, [name( %qa )] <%qa> is already on exclude rooms list. ),
+					strcat(
+						set( %!, d.exclude.rooms:[edit( %qd, $, %b%qa )] ),
+						u( .msg, +repose, Adding [name( %qa )] <%qa> to exclude rooms list. ),
+						@@( $ keeps the existing list, adds in a space + the room dbref) )
+				),
+			u( .msg, +Repose, You have not entered a valid room #dbref. )
+		)
+	)
+
+/*
+
+=============================
+== Help File ================
+
+Including a "help" command because some people don't have easy ways to add new +help commands!
+
+*/
+
+&disp.help [v( d.rr )]=
+	strcat(
+		header(The Repose Reposer <RR> Help File), %r%r,
+		The Repose Reposer tracks recent poses and allows you to recall them., %r,
+		Poses are tracked from the the last X minutes. Value is set by staff., %r%r,
+		%xhCommands%xn, %r%r,
+		* +repose : display the current +repose list,%r,
+		* +repose/clear : Clears the +repose list.,%r,
+		* +repose/here <on/off/temp> : The owner can turn off +repose for the room.,%r,
+		%tUsing 'temp' allows +repose to be temporarily turned off. It will, %r,
+		%tbe turned back on when the room empties%, or you use command again., %r,
+		* +repose/exclude <here/dbref/!dbref/list> : Exclude room from +repose.,%r,
+		%tEx: +repose/exclude #123, %r,
+		* +repose/help : This right here.,%r%r,
+		This whole thingy was made by skew.,%r%r,
+		footer(+repose/help)
+	)	
+	
+/*
+
+=============================
+== Com Chan =================
+
+The code outputs to a channel (see: d.com.channel) whenever repose is used. It's an effort to monitor who is using it and where, so staffers can watch and see if someone is popping into temp rooms and using it (ie, using it to spy or do uncouth things).
+
+** THIS IS OPTIONAL -- YOU CAN USE AN EXISTING ROOM OR NO ROOM **
+
+It is going to look for "Code Wizard" and "Channel Pocket". If you don't have those, or use something else, fix it below.
+
+This assumes you have a functional isstaff() function, and locks the room to staff.
+
+*/
+
+@create Repose Monitor Channel Object
+@chown Repose Monitor Channel Object=search( name=Code Wizard )
+@set Repose Monitor Channel Object=!halt
+@desc Repose Monitor Channel Object=Monitors use of +repose
+&d.isstaff Repose Monitor Channel Object=isstaff( %# )
+@lock Repose Monitor Channel Object=D.ISSTAFF/1
+@lock/use Repose Monitor Channel Object=D.ISSTAFF/1
+@lock/enter Repose Monitor Channel Object=D.ISSTAFF/1
+
+@@ --
+@ccreate Repose Monitor
+@cset/object Repose Monitor=Repose Monitor Channel Object
+@cset/header Repose Monitor=ansi( r, \[Repose Monitor\] )
+@cset/log Repose Monitor=100
+@cchown Repose Monitor=search( name=Code Wizard )
+
+@tel Repose Monitor Channel Object=search( name=Channel Pocket )
+
+@cpflags Repose Monitor=!transmit
+@cpflags Repose Monitor=!join
+@cpflags Repose Monitor=!receive
+
