@@ -119,15 +119,15 @@ which mostly means adding "Character says, "Stuff"." where necessary.
 			setq( f, first( %0 ) ),
 			setq( e, switch( %qc,
 				:, u( f.format.repose, rest( %qu, : ), pose ),
-				;, u( f.format.repose, rest( %qu, ; ), pose.ns ),
+				;, u( f.format.repose, trim( %qu ) , pose.ns ),
 				", u( f.format.repose, rest( %qu, " ), say ),
-				\, u( f.format.repose, rest( %qu, \ ), emit ),
+				\, u( f.format.repose, rest( %qu, lit( \ ) ), emit ),
 				switch( 1,
 					strmatch( %qf, po* ), u( f.format.repose, rest( %qu ), pose ),
 					strmatch( %qf, sa* ), u( f.format.repose, rest( %qu ), say ),
 					strmatch( %qf, @em* ), u( f.format.repose, rest( %qu ), emit ),
 					strmatch( %qf, @re* ), u( f.format.repose, rest( %qu ), emit ),
-					Why is this failing? ) ) ),	
+					u( f.format.repose, trim( %qu ), emit ) ) ) ),	
 // This long nasty bit tries to figure out how you posed. Ie, " or @em or etc
 			set( %ql, 
 				u( f.format.repose.attribute, %# ):
