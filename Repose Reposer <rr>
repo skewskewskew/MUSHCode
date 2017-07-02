@@ -88,7 +88,7 @@ they are cleared, or until the room is empty.
 
 Variables:
 
-	u: unedited pose (which really makes no sense, because it's "secured" at that point)
+	u: unedited pose
 	c: grab the first character of the data sent
 	f: grab the first word sent
 	e: process the unedited pose to determine how to format it
@@ -114,7 +114,10 @@ which mostly means adding "Character says, "Stuff"." where necessary.
 // check setting on local room 
 			), @@( If on the no list do nothing else process rest of this ),
 		strcat(
-			setq( u, u( f.secure.pose, [secure( %0 )] ) ),
+			setq( u, u( f.secure.pose, objeval( %#, s( %0 )) ) ),
+// Using objeval will eval the string as if by %# (ie, the invoker).
+// This should filter out MOST nonsense people might try
+// f.secure.pose boggles up [] so that should handle the rest
 			setq( c, strtrunc( %0, 1) ),
 			setq( f, first( %0 ) ),
 			setq( e, switch( %qc,
@@ -148,9 +151,9 @@ which mostly means adding "Character says, "Stuff"." where necessary.
 	emit, %0,
 	%0 )
 
-@@ Everything has already been secure()'d at this point. This further removes
-@@ | and ~ becuase they're used elsewhere, along with []
-&f.secure.pose [v( d.rr )]=edit( %0 , lit( [ ), , lit( ] ), , |, , ~,  )
+@@ Everything has been ran through objeval, so stuff should be ok.
+@@ Still, for extra safety, I'm eating up [] if it's in your pose.
+&f.secure.pose [v( d.rr )]=edit( %0 , lit( [ ), , lit( ] ), )
 
 @@ how the attribute itself will appear
 @@ should look like d.repose.190328093.character
@@ -162,18 +165,9 @@ which mostly means adding "Character says, "Stuff"." where necessary.
 
 @@ Clearing the list! Clears after x minutes, or when the room is empty.
 
-@@ Puts poses in order, outputs: time.player.pose
-@@ This is used in the sweeps just because it was used in other code.
-@@ Output is like: secs.dbref|pose~ ... so:
-@@ 1208958.#289|This is my pose.~10982098.#202|This is another pose.
-
-&f.order.poses [v( d.rr )]=
-	strcat(
-		setq( o, sort( iter( lattr( %0/d.repose.* ), ##, , ~) ) ),
-		iter( %qo, strcat(
-			elements( ##, 3 4, . ), |, get( %0/## ) ), ~, ~ )
-// List of who posed is stored on room object 
-	)
+@@ Puts poses in order, outputs: D.REPOSE.1498969875.#289~D.REPOSE.1498970182.#289
+	
+&f.order.poses [v( d.rr )]=sort( lattr( %0/d.repose.* ), , , ~)
 
 @@ Searches for rooms with the d.repose.* attrib
 	
@@ -192,9 +186,9 @@ which mostly means adding "Character says, "Stuff"." where necessary.
 		setq( r, %0 ),
 		setq( o, u( f.order.poses, %qr ) ),
 		iter( %qo, strcat(
-			setq( t, first( ##, . ) ), @@( Get the time. ),
-			setq( p, first( elements( ##, 2, . ), | ) ), @@( Get the player dbref ),
-			if( gte( sub( secs(), %qt ), u( d.repose.preserve ) ),
+			setq( t, elements( ##, 3, . ) ), @@( Get the time. ),
+			setq( p, last( ##, . ) ), @@( Get the player dbref ),
+			if( gte( sub( secs(), %qt ), v( d.repose.preserve ) ),
 				wipe( %qr/d.repose.%qt.%qp ) )
 			), ~ ),
 		if( t( lcon( %qr, connect) ), 
@@ -229,6 +223,9 @@ Beth posed at 11:34
 
 @@ This one checks if room is on exclude list, then if room is off
 @@ Then checks if there are poses, and if there are, outputs poses
+
+// Input: Location (%0), Invoker (%1)
+// %qo should look like: D.REPOSE.1498968377.#1051~D.REPOSE.1498968998.#1051
 	
 &disp.repose [v( d.rr )]=
 	strcat( @@( This pulls the list of reposers and displays it. Nbd.),
@@ -251,20 +248,24 @@ Beth posed at 11:34
 					setq( o, u( f.order.poses, %0 ) ),
 					if( not( %qo ), strcat(
 						ljust( ,10), ljust( No one has posed yet., 40 ), %r%r ),
-						iter( %qo, u( disp.format.repose, ## ), ~, %r ) )
+						u( disp.format.repose, %qo ) )
 					)
 			)
 	)
 
-@@ Grabs the individual pose and processes it. Basically takes
-@@ 12089.name.pose and makes it: Name posed at time: <pose>	
+
+// Input: D.REPOSE.1498968377.#1051~D.REPOSE.1498968998.#1051	
+// Output: NAME posed at TIME: <pose> %r%r Output: NAME posed at TIME:...
 	
-&disp.format.repose	[v( d.rr )]=
-	strcat(
-		setq( t, timefmt( $H:$M, first( %0, . ) ) ),
-		setq( p, first( elements( %0, 2, . ), | ) ),
-		setq( w, last( %0, | ) ),
-		name(%qp)%b,posed at %qt:, %r%t, %qw, %r )
+&disp.format.repose [v( d.rr )]=
+		iter( %0, strcat(
+			setq( t, 
+				timefmt( $H:$M, elements( ##, 3, . ) ) ),
+			setq( p, last( ##, . ) ),
+			%t%xh [name( %qp )] %xn,
+			posed at %qt:, %r%r,
+			get( loc( %# )/## ) ), ~, %r%r)
+	
 
 /*
 
@@ -278,17 +279,10 @@ Options:
 
 * <null> : display the repose. Note that we are adding in some output for this, meant to go to a monitor channel. There's some concern about players entering "private" scenes and using this command to "spy" on people, OOCly and wrongly. So whenever someone view Repose, it should send who did it and the room they're in to the com channel.
 * /clear : Clears the repose. Can be used for whatever reason. It will display to the room it's happening -- if someone keeps clearing repose for some reason, hit them with a brick.
-* /here <on/off> : Staff or room owner can turn off repose for the room.
+* /here <on/off/temp> : Staff or room owner can turn off repose for the room. If using temp, that works in public rooms. Temporary shuts it off. It'll turn back on automatically when the room empties (or someone uses /temp again).
 * /exclude <here/dbref/!dbref> : Update the norepose object for rooms that should be excluded. Faster than having to go to each room individually.
 
 */
-
-@@ Mistress command. Captures +repose(anything else).
-
-@@ Need to add a way to temporary turn it off, for temp rooms. If
-@@ you're in public, it's on, that's fine. Or staff can turn it off
-@@ but temp rooms CAN be primary. Maybe turn it off, then if off and
-@@ room is empty, clear off flag?
 
 &c.repose [v( d.rr )]=$^\+?repose([\s\S]+)?$:@pemit %#=
 	[setq( 0, secure( %1 ))]
@@ -309,7 +303,7 @@ Options:
 	strcat(
 		header(Recent poses as of [timefmt( $H:$M, secs() )]%, server time.),
 		%r%r,
-		u( disp.repose, %0, %1 ), %r,
+		u( disp.repose, %0, %1 ), %r%r,
 		footer(+repose),
 		cemit( [v(d.com.channel)], 
 			[name( %1 )] has checked +repose in "[name( %0 )] - <%0>" at [time()]. )
@@ -469,4 +463,3 @@ This assumes you have a functional isstaff() function, and locks the room to sta
 @cpflags Repose Monitor=!transmit
 @cpflags Repose Monitor=!join
 @cpflags Repose Monitor=!receive
-
