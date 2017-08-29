@@ -1,0 +1,33 @@
+
+The following should be in netmux.conf ...
+
+## hook functions ###############################
+hook_obj 14
+posebreak: "before"
+hook_cmd pose before
+hook_cmd npose before
+hook_cmd : before
+hook_cmd ; before
+hook_cmd say before
+hook_cmd nsay before
+hook_cmd " before
+hook_cmd @emit before
+hook_cmd \ before
+hook_cmd @remit before
+posebreak: "after"
+hook_cmd pose after
+hook_cmd npose after
+hook_cmd : after
+hook_cmd ; after
+hook_cmd say after
+hook_cmd nsay after
+hook_cmd " after
+hook_cmd @emit after
+hook_cmd \ after
+hook_cmd @remit after
+
+This is installed on SGP - Main Globals, which is generally #6
+
+&C.POSEBREAK #6=$^\+?posebreak(.*)$:think strcat( q0:, %b, setq( 0, trim( first( %1 ))), %r, q1:, %b, setq( 1, trim( rest( %1 )))); @switch %q0=on, { @set/quiet %#=_posebreak:[default( %#/_posebreak.style, 10 )]; @pemit %#=u( .msg, posebreak, On %([switch( get( %#/_posebreak ), 1*, before only, 11, before & after, after only )]%) ) }, off, { @set/quiet %#=_posebreak:; @pemit %#=u( .msg, posebreak, Off. ) }, before, { @if t( %q1 )={ @set/quiet %#=posebreak-before:%q1; @pemit %#=u( .msg, posebreak, Before posebreak set to '%q1' ) }, { @set/quiet %#=_posebreak.style:10; @set/quiet %#=_posebreak:10; @pemit %#=u( .msg, posebreak, On %(before only%). ) }}, after, { @if t( %q1 )={ @set/quiet %#=posebreak-after:%q1; @pemit %#=u( .msg, posebreak, After posebreak set to '%q1' ) }, { @set/quiet %#=_posebreak.style:01; @set/quiet %#=_posebreak:01; @pemit %#=u( .msg, posebreak, On %(after only%) ) }}, both, { @if t( %q1 )={ @set/quiet %#=posebreak-before:%q1; @set/quiet %#=posebreak-after:%q1; @pemit %#=u( .msg, posebreak, Before & after posebreaks set to '%q1' )}, { @set/quiet %#=_posebreak.style:11; @set/quiet %#=_posebreak:11; @pemit %#=u( .msg, posebreak, On %(before & after%) ) }}, clear, { @switch %q1=before, { @set/quiet %#=posebreak-before:; @pemit %#=u( .msg, posebreak, 'Before' posebreak text cleared )}, after, { @set/quiet %#=posebreak-after:; @pemit %#=u( .msg, posebreak, 'After' posebreak text cleared ) }, both, { @set/quiet %#=posebreak-before:; @set/quiet %#=posebreak-after:; @set/quiet %#=posebreak:; @pemit %#=u( .msg, posebreak, All posebreak texts cleared ) }, all, { @set/quiet %#=posebreak-before:; @set/quiet %#=posebreak-after:; @set/quiet %#=posebreak:; @pemit %#=u( .msg, posebreak, All posebreak texts cleared ) }, { @pemit %#=u( .msg, posebreak, Use 'posebreak clear <before/after/both>' )}}, { @if [strlen( %q0 )]={ @set/quiet %#=posebreak:%q0; @pemit %#=u( .msg, posebreak, Posebreak set to '%q0'[if( cor( hasattr( %#, posebreak-before ), hasattr( %#, posebreak-after )), %, but your 'before' or 'after' posebreak text may override it )] )}, { @pemit %#=u( .msg, posebreak, Posebreak is [if( get( %#/_posebreak ), On %([case( get( %#/_posebreak.style ), 10, before only, 01, after only, 11, before & after, borked )]%), Off )] ) }};
+@set #6/C.POSEBREAK = regexp
+
