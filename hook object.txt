@@ -1,0 +1,28 @@
+// This is the hook object from Fate's Harvest. Note that any dbrefs apply to that game.
+
+@create @hook object <ho>=10
+&B_@EMIT @hook object <ho>=[u( fn_posebreak, before )][u( [v( d.pom )]/f.poseorder )][u( [v( d.rr )]/f.capture.pose, %m )]
+&B_@REMIT @hook object <ho>=[u( fn_posebreak, before )]
+&B_NPOSE @hook object <ho>=[u( fn_posebreak, before )][u( [v( d.pom )]/f.poseorder )][u( [v( d.rr )]/f.capture.pose, %m )]
+&B_NSAY @hook object <ho>=[u( fn_posebreak, before )][u( [v( d.pom )]/f.poseorder )][u( [v( d.rr )]/f.capture.pose, %m )]
+&B_POSE @hook object <ho>=[u( fn_posebreak, before, pose )][u( [v( d.pom )]/f.poseorder )][u( [v( d.rr )]/f.capture.pose, %m )]]
+&B_POSE/NOSPACE @hook object <ho>=[u( fn_posebreak, before )][u( [v( d.pom )]/f.poseorder )][u( [v( d.rr )]/f.capture.pose, %m )]
+&B_SAY @hook object <ho>=[u( fn_posebreak, before )][u( [v( d.pom )]/f.poseorder )][u( [v( d.rr )]/f.capture.pose, %m )]
+&B_PAGE @hook object <ho>=[u(fn_record_page-last-sent)]
+&A_@EMIT @hook object <ho>=[u( fn_posebreak, after )]
+&A_@REMIT @hook object <ho>=[u( fn_posebreak, after )]
+&A_NPOSE @hook object <ho>=[u( fn_posebreak, after )]
+&A_NSAY @hook object <ho>=[u( fn_posebreak, after )]
+&A_POSE @hook object <ho>=[u( fn_posebreak, after, pose )]
+&A_POSE/NOSPACE @hook object <ho>=[u( fn_posebreak, after )]
+&A_SAY @hook object <ho>=[u( fn_posebreak, after )]
+&FN_POSEBREAK @hook object <ho>=iter( filter( fil_posebreak-%0, lcon( loc( %# ), connect )), strcat( setq( 0, objeval( %i0, udefault( %i0/posebreak-%0, udefault( %i0/posebreak, %b )))), objeval( %i0, pemit( %i0, %q0 ))))
+&FIL_POSEBREAK-BEFORE @hook object <ho>=strmatch( get( %0/_posebreak ), 1* )
+&FIL_POSEBREAK-AFTER @hook object <ho>=strmatch( get( %0/_posebreak ), ?1 )
+&B_ @hook object <ho>=[u(f.posebreak)]
+&D.POM @hook object <ho>=#1905
+&D.RR @hook object <ho>=#2811
+@set @hook object <ho>=INHERIT
+@set @hook object <ho>=SAFE
+@rxlevel @hook object <ho>= Real Hedge Twilight Shadow All
+@txlevel @hook object <ho>= Real
