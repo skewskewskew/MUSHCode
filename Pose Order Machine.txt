@@ -79,12 +79,24 @@ you can keep tinkering even if the object isn't in the room with you.
 
 @@ Configure the hook object to send to the pom object.
 
-@edit [v( d.ho )]/B_POSE = $, [u( [v( d.pom )]/f.poseorder )]
-@edit [v( d.ho )]/B_POSE/NOSPACE = $, [u( [v( d.pom )]/f.poseorder )]
-@edit [v( d.ho )]/B_NPOSE = $, [u( [v( d.pom )]/f.poseorder )]
-@edit [v( d.ho )]/B_SAY = $, [u( [v( d.pom )]/f.poseorder )]
-@edit [v( d.ho )]/B_NSAY = $, [u( [v( d.pom )]/f.poseorder )]
-@edit [v( d.ho )]/B_@EMIT = $, [u( [v( d.pom )]/f.poseorder )]
+@@ First, delete old enteries. If you've not installed POM before, this does nothing.
+
+@edit [v( d.ho )]/B_POSE = [u( [v( d.pom )]/f.poseorder )],
+@edit [v( d.ho )]/B_POSE/NOSPACE = [u( [v( d.pom )]/f.poseorder )],
+@edit [v( d.ho )]/B_NPOSE = [u( [v( d.pom )]/f.poseorder )],
+@edit [v( d.ho )]/B_SAY = [u( [v( d.pom )]/f.poseorder )],
+@edit [v( d.ho )]/B_NSAY = [u( [v( d.pom )]/f.poseorder )],
+@edit [v( d.ho )]/B_@EMIT = [u( [v( d.pom )]/f.poseorder )],
+
+@@ Second, add entries we need. This now contains 'who posed', which is used
+@@ in a later part of the code.
+
+@edit [v( d.ho )]/B_POSE = $, [u( [v( d.pom )]/f.poseorder, %# )]
+@edit [v( d.ho )]/B_POSE/NOSPACE = $, [u( [v( d.pom )]/f.poseorder, %# )]
+@edit [v( d.ho )]/B_NPOSE = $, [u( [v( d.pom )]/f.poseorder, %# )]
+@edit [v( d.ho )]/B_SAY = $, [u( [v( d.pom )]/f.poseorder, %# )]
+@edit [v( d.ho )]/B_NSAY = $, [u( [v( d.pom )]/f.poseorder, %# )]
+@edit [v( d.ho )]/B_@EMIT = $, [u( [v( d.pom )]/f.poseorder, %# )]
 
 @@ This is the CRON stuff. It is looking for 'CRON' for the name of the object.
 @@ Please make sure there's something to find. If not, manually set &d.cron me=#dbref
@@ -106,6 +118,9 @@ you can keep tinkering even if the object isn't in the room with you.
 */
 
 @@ Need to consider flagging for OOC zone.
+@@ Variables: 0: The target to process as having posed.
+@@ Previously, this assumed the poser would always be the 'target'. Now we are
+@@ Adding pose skipping, so %0 might not always be the enactor. Might be someone else.
 
 &f.poseorder [v( d.pom )]=
 	strcat(
@@ -115,10 +130,10 @@ you can keep tinkering even if the object isn't in the room with you.
 					match( get( %ql/_POSE.ORDER ), off ), @@( check setting on local room )
 				), @@( If on the no list do nothing ),
 				strcat(
-					wipe( %ql/d.pose.*.%# ), @@( clear your previous poses ),
+					wipe( %ql/d.pose.*.%0 ), @@( clear your previous poses ),
 					set( %ql, 
-						u( f.format.pose.attribute, %# ):
-						[u( f.format.pose.data, %# )] ), @@( add that you posed ),
+						u( f.format.pose.attribute, %0 ):
+						[u( f.format.pose.data, %0 )] ), @@( add that you posed ),
 					trigger( %!/trig.pose.alert, %ql), @@( alert next up )
 				) 
 			)
@@ -243,6 +258,7 @@ Options:
 * /clear : Clears the current pose order. Do we need this? Could be used when starting a 'new' scene
 * /here <on/off> : Staff or room owner can turn off poseorder for the room.
 * /exclude <here/dbref/!dbref> : Update the noposeorder object for rooms that should be excluded.
+* /skip <name> : Marks a person as having posed.
 
 */
 
@@ -257,6 +273,8 @@ Options:
 		/clear, u( c.poseorder.clear.here, loc( %# ), %# ),
 		/here *, u( c.poseorder.switch.here, trim(rest( %q0 )), loc( %# ), %# ),
 		/exclude *, u( c.poseorder.exclude, trim(rest( %q0 )), loc( %# ), %# ),
+		/skip *, u( c.poseorder.skip, trim(rest( %q0 )), loc( %# ), %# ),
+		/remove *, u( c.poseorder.remove, trim(rest( %q0 )), loc( %# ), %# ),
 		u( .msg, Pose Order, Please see +poseorder/help. )
 	)]
 	
@@ -264,7 +282,7 @@ Options:
 		
 &c.display.pose.order [v( d.pom )]=
 	strcat(
-		header(Who's turn is it? <POM>), %r,
+		header(Whose turn is it? <POM>), %r,
 		u( display.pose.order, %0, %1 ),
 		footer(+poseorder), @@( Displays who is up and pose order )
 	)
@@ -348,6 +366,46 @@ Options:
 			u( .msg, Pose Order, You have not entered a valid room #dbref. )
 		)
 	)
+	
+@@ Check if target is a player, check if they're on the list, process a pose	
+@@ u( c.poseorder.skip, trim(rest( %q0 )), loc( %# ), %# )
+
+	
+&c.poseorder.skip [v( d.pom )]=
+	strcat(
+		setq( p, pmatch( %0 ) ),
+		switch( 0,
+			t( pmatch( %qp ) ), 
+			u( .msg, Pose Order, %0 is not a valid player. ),
+			strmatch( lattr( %1/d.pose.* ), *%qp* ),
+			u( .msg, Pose Order, [name(%qp)] has not posed in this room. ),
+			strcat( 
+				u( f.poseorder, %qp ),
+				remit( %1, u( .msg, Pose Order, [name(%2)] has skipped [name(%qp)]. )),
+				u( .msg, Pose Order, You have skipped [name(%qp)]. )
+			)
+		)
+	)
+
+@@ Remove a person from poseorder. This will actually process that they posed
+@@ and then remove them, so it properly alerts the next person.
+
+&c.poseorder.remove [v( d.pom )]=
+	strcat(
+		setq( p, pmatch( %0 ) ),
+		switch( 0,
+			t( pmatch( %qp ) ), 
+			u( .msg, Pose Order, %0 is not a valid player. ),
+			strmatch( lattr( %1/d.pose.* ), *%qp* ),
+			u( .msg, Pose Order, [name(%qp)] has not posed in this room. ),
+			strcat(
+				remit( %1, u( .msg, Pose Order, [name(%2)] has removed [name(%qp)]. )),
+				u( .msg, Pose Order, You remove [name(%qp)]. ),
+				[wipe( %1/d.pose.*.%qp )],
+				trigger( %!/trig.pose.alert, %1)
+			)
+		)
+	)	
 
 /*
 
@@ -368,6 +426,8 @@ Including a "help" command because some people don't have easy ways to add new +
 		* +poseorder/clear : Clears the current pose order.,%r,
 		* +poseorder/here <on/off> : The Owner can turn off poseorder for the room.,%r,
 		* +poseorder/exclude <here/dbref/!dbref/list> : Exclude room from pose order.,%r,
+		* +poseorder/skip <name> : Skips a person.,%r,
+		* +poseorder/remove <name> : Removes a person from the poseorder, %r,
 		* +poseorder/help : This right here.,%r%r,
 		This whole thingy was made by skew.,%r%r,
 		footer(+poseorder/help), @@( Displays who is up and pose order )
