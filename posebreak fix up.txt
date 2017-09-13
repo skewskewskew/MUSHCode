@@ -32,3 +32,41 @@ This is installed on SGP - Main Globals, which is generally #6
 @set #6/C.POSEBREAK = regexp
 
 &.MSG #6=ansi( h, <%0>, n, %b%1 )
+
+/*
+
+You also need the hook object set up. I've added this before. NOTE that this used to include poseorder + repose, but I've HOPEFULLY removed those  correctly.
+
+Make sure to set &D.OOC.ZONE @hook object <ho>=#1977 -- this is your OOC zone! Which means it'll skip your OOC room(s).
+F.POSEBREAK-ALLOW can be edited to change to a specific room number or something else as need be, but right now points at
+ooc zone.
+
+
+*/
+
+@create @hook object <ho>=10
+&B_@EMIT @hook object <ho>=[u( fn_posebreak, before )]
+&B_@REMIT @hook object <ho>=[u( fn_posebreak, before )]
+&B_NPOSE @hook object <ho>=[u( fn_posebreak, before )]
+&B_NSAY @hook object <ho>=[u( fn_posebreak, before )]
+&B_POSE @hook object <ho>=[u( fn_posebreak, before, pose )]
+&B_POSE/NOSPACE @hook object <ho>=[u( fn_posebreak, before )]
+&B_SAY @hook object <ho>=[u( fn_posebreak, before )]
+&B_PAGE @hook object <ho>=[u(fn_record_page-last-sent)]
+&A_@EMIT @hook object <ho>=[u( fn_posebreak, after )]
+&A_@REMIT @hook object <ho>=[u( fn_posebreak, after )]
+&A_NPOSE @hook object <ho>=[u( fn_posebreak, after )]
+&A_NSAY @hook object <ho>=[u( fn_posebreak, after )]
+&A_POSE @hook object <ho>=[u( fn_posebreak, after, pose )]
+&A_POSE/NOSPACE @hook object <ho>=[u( fn_posebreak, after )]
+&A_SAY @hook object <ho>=[u( fn_posebreak, after )]
+&FN_POSEBREAK @hook object <ho>=iter( filter( fil_posebreak-%0, lcon( loc( %# ), connect )), strcat( setq( 0, objeval( %i0, udefault( %i0/posebreak-%0, udefault( %i0/posebreak, %b )))), objeval( %i0, pemit( %i0, %q0 ))))
+&FIL_POSEBREAK-BEFORE @hook object <ho>=cand( udefault(f.posebreak-allow, 1, %0), strmatch( get( %0/_posebreak ), 1* ) )
+&FIL_POSEBREAK-AFTER @hook object <ho>=cand( udefault(f.posebreak-allow, 1, %0), strmatch( get( %0/_posebreak ), ?1 ) )
+&B_ @hook object <ho>=[u(f.posebreak)]
+&F.POSEBREAK-ALLOW @hook object <ho>=not(strmatch(zone(loc(%0)), [v( d.ooc.zone )]))
+&D.OOC.ZONE @hook object <ho>=#1977
+@set @hook object <ho>=INHERIT
+@set @hook object <ho>=SAFE
+@rxlevel @hook object <ho>= Real Hedge Twilight Shadow All
+@txlevel @hook object <ho>= Real
