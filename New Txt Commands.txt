@@ -1,0 +1,56 @@
+// Text messaging borrowed from who-knows-where and updated by Skew.
+// Just sends everything via emit.
+
+&C.TXT_MSG #6=$txt *=*:[u(f.handle_msg, %0, %1, text )]
+
+&F.HANDLE_MSG #6=
+	[setq(t, trim(%0)))]
+	[setq(m, trim(%1))]
+	[case(0, 
+		t(setr(t, u(f.player.to-list, %qt))), 
+		pemit(%#, [alert(TXT)] To list must be valid player names or aliases in a comma-separated list.),
+		not( match( iter( %qt, hasflag( ##,CONNECTED ), \, ), *0*) ),
+		pemit(%#, [alert(TXT)] Sorry one or more of your recipients is not online.),
+		u(f.send_msg, %qt, %2, %qm))]
+
+&F.PLAYER.TO-LIST #6=iter(filter(fil.isplayer, %0, %,, %,), pmatch+(secure(trim(%i0))), %,)
+
+&F.SEND_MSG #6=
+	[setq( a, if( t( get( %#/txt.highlight)), get( %#/txt.highlight), c ))]
+	[setq( b, if( t( get( %#/txt.lowlight)), get( %#/txt.lowlight), c ) )]
+	[pemit( 
+		%#, ansi( %qa, >>%b, %qb, You send to%b, %qa, iter( %0, name(%i0), %b, %,%b), %qb, %bvia %1:%b, n, %2 ))]
+	[iter( %0, pemit( %i0, 
+		strcat( 
+			[setq( c, if( t( get( %i0/txt.highlight)), get( %i0/txt.highlight), c ) )],
+			[setq( d, if( t( get( %i0/txt.lowlight)), get( %i0/txt.lowlight), c ) )],
+			ansi( %qc, >>%b, %qd, You receive from%b, %qc, [name( %# )]%b, %qd, via %1:%b, n, %2 ))))]
+
+&C.+TEXT_MSG #6=$+text *=*:[u(f.handle_msg, %0, %1, text )]
+
+&C.+PHONE_MSG #6=$+phone *=*:[u(f.handle_msg, %0, %1, phone )]
+
+&C.+TELEPATHY_MSG #6=$+telepathy *=*:[u(f.handle_msg, %0, %1, telepathy )]
+
+&C.+TELEPATHY2_MSG #6=$+tele *=*:[u(f.handle_msg, %0, %1, telepathy )]
+
+&C.+TELEPATHY3_MSG #6=$+tp *=*:[u(f.handle_msg, %0, %1, telepathy )]
+
+&C.+TXT_MSG #6=$+txt *=*:[u(f.handle_msg, %0, %1, text )]
+
+&c.txt_highlight #6=$^\+?txt/highlight(s?.*)$:[setq( c, secure( %1))][set( %#, txt.highlight:%qc)][pemit( %#, [ ansi( %qc, >>, n, %bText highlight color is now, %qc, %bset)].)]
+
+
+@set #6/c.txt_highlight=regexp
+
+// Usage: +txt/highlight #fffff -- This'll set colors for YOUR SCREEN, so you can make 'em stand out.
+
+&c.txt_lowlight #6=$^\+?txt/lowlight(s?.*)$:[setq( c, secure( %1))][set( %#, txt.lowlight:%qc)][pemit( %#, [ ansi( n, >>, %qc, %bText lowlight color is now, n, %bset)].)]
+
+@set #6/c.txt_lowlight=regexp
+
+
+// Usage: +txt/lowlight #fffff -- This'll set colors for YOUR SCREEN, so you can make 'em stand out.
+
+
+
