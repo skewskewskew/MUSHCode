@@ -1,0 +1,62 @@
+// This should go on SGP - Main Globals
+
+&c.get.cast #6=$^\+?getcast(.*)$:@pemit %#=
+	strcat( setq( 0, secure( %1 )),
+		switch( %q0,
+			, u( f.disp.cast.room, loc( %# ), %# ),
+			%b*, u( f.disp.cast.target, trim( %q0 ), %# ),
+			It's either something or nothing how did this go wrong?) )
+			
+&f.disp.cast.room #6=
+	strcat( 
+		setq( l, %0 ),
+		setq( p, %1 ),
+		u( disp.rainbow ), %r,
+		center( %xhScene Cast List%xn for %xh[name(%ql)]%xn, 79 ),%r%r,
+		iter( lcon( %ql, connect ), strcat(
+			setq( f, last( get( ##/finger-wiki ), / ) ),
+			setq( w, last( get( ##/wiki ), / ) ),
+			lit([[),
+			switch( 1,
+				t( %qw ), %qw, 
+				t( %qf ), %qf,
+				%xh%xxMissing%xn), 
+			|, name( ## ), lit(]]) ), , %,%b), %r,
+		u( disp.rainbow) )
+		
+&f.disp.cast.target #6=
+	strcat(
+		setq( t, pmatch( %0 ) ),
+		if( t( %qt),
+		strcat(
+			%r, Wiki-Friendly Formatting for %xh[name( %qt )]%xn:, %b,
+			setq( f, last( get( %qt/finger-wiki ), / ) ),
+			setq( w, last( get( %qt/wiki ), / ) ),
+				lit([[),
+				switch( 1,
+					t( %qw ), %qw, 
+					t( %qf ), %qf,
+					%xh%xxMissing%xn), 
+				|, name( %qt ), lit(]]), %r ),
+			%xh<+getcast>%xn Target must be a player. )
+			)
+			
+&disp.rainbow #6=%r%xx__%xh__%xn%xm__%xh__%xn%xb___%xh___%xn%xc____%xh____%xn%xg_____%xh_____%xn%xx___%xn%xx_%xh_%xn%xm_%xh_%xn%xb_%xh_%xn%xc_%xh_%xn%xh%xx___%xn%xg%xh_____%xn%xg_____%xc%xh____%xn%xc____%xb%xh___%xn%xb___%xm%xh__%xn%xm__%xx%xh__%xn%xx__%xn
+
+@set #6/c.get.cast=regex
+
+
+
++bbpost 1/New Command: +getcast=We have a new command: +getcast
+
++getcast : Returns a list of players in the current room, with all names formatted to be copy+pasted onto the wiki, eg, \[\[John_Smith|John\]\].
++getcast <target> : Returns an individual players properly formatted wiki name. This can be used on players outside of the room.
+
+%xhPlease note:%xn You must have your wiki +finger attribute set for this to work! If you do not, it will return 'Missing'.
+
+To set your wiki finger attribute, use: +finger/set Wiki=+finger/set Wiki=http://fallenworldmux.com/wiki/<your name>
+
+You should include the address exactly as it is copy+pasted from the wiki (though if you have special characters in your name and the wiki address isn't working, please contact staff for help!).
+
+Example: +finger/set Wiki=http://fallenworldmux.com/wiki/Karma
+
