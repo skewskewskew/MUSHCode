@@ -1,6 +1,8 @@
 /*
 
-The following should be in netmux.conf ...
+This all tweaks the +posebreak command most everyone seems to be using by default. It allows an AFTER.
+ 
+The following should be in netmux.conf, which means server-side ...
 
 ## hook functions ###############################
 hook_obj 14
@@ -27,50 +29,10 @@ hook_cmd @emit after
 hook_cmd \ after
 hook_cmd @remit after
 
-
-This is installed on SGP - Main Globals, which is generally #6
-
 */
+
+// This is installed on SGP - Main Globals, which is generally #6
 
 &C.POSEBREAK #6=$^\+?posebreak(.*)$:think strcat( q0:, %b, setq( 0, trim( first( %1 ))), %r, q1:, %b, setq( 1, trim( rest( %1 )))); @switch %q0=on, { @set/quiet %#=_posebreak:[default( %#/_posebreak.style, 10 )]; @pemit %#=u( .msg, posebreak, On %([switch( get( %#/_posebreak ), 1*, before only, 11, before & after, after only )]%) ) }, off, { @set/quiet %#=_posebreak:; @pemit %#=u( .msg, posebreak, Off. ) }, before, { @if t( %q1 )={ @set/quiet %#=posebreak-before:%q1; @pemit %#=u( .msg, posebreak, Before posebreak set to '%q1' ) }, { @set/quiet %#=_posebreak.style:10; @set/quiet %#=_posebreak:10; @pemit %#=u( .msg, posebreak, On %(before only%). ) }}, after, { @if t( %q1 )={ @set/quiet %#=posebreak-after:%q1; @pemit %#=u( .msg, posebreak, After posebreak set to '%q1' ) }, { @set/quiet %#=_posebreak.style:01; @set/quiet %#=_posebreak:01; @pemit %#=u( .msg, posebreak, On %(after only%) ) }}, both, { @if t( %q1 )={ @set/quiet %#=posebreak-before:%q1; @set/quiet %#=posebreak-after:%q1; @pemit %#=u( .msg, posebreak, Before & after posebreaks set to '%q1' )}, { @set/quiet %#=_posebreak.style:11; @set/quiet %#=_posebreak:11; @pemit %#=u( .msg, posebreak, On %(before & after%) ) }}, clear, { @switch %q1=before, { @set/quiet %#=posebreak-before:; @pemit %#=u( .msg, posebreak, 'Before' posebreak text cleared )}, after, { @set/quiet %#=posebreak-after:; @pemit %#=u( .msg, posebreak, 'After' posebreak text cleared ) }, both, { @set/quiet %#=posebreak-before:; @set/quiet %#=posebreak-after:; @set/quiet %#=posebreak:; @pemit %#=u( .msg, posebreak, All posebreak texts cleared ) }, all, { @set/quiet %#=posebreak-before:; @set/quiet %#=posebreak-after:; @set/quiet %#=posebreak:; @pemit %#=u( .msg, posebreak, All posebreak texts cleared ) }, { @pemit %#=u( .msg, posebreak, Use 'posebreak clear <before/after/both>' )}}, { @if [strlen( %q0 )]={ @set/quiet %#=posebreak:%q0; @pemit %#=u( .msg, posebreak, Posebreak set to '%q0'[if( cor( hasattr( %#, posebreak-before ), hasattr( %#, posebreak-after )), %, but your 'before' or 'after' posebreak text may override it )] )}, { @pemit %#=u( .msg, posebreak, Posebreak is [if( get( %#/_posebreak ), On %([case( get( %#/_posebreak.style ), 10, before only, 01, after only, 11, before & after, borked )]%), Off )] ) }};
 @set #6/C.POSEBREAK = regexp
 
-&.MSG #6=ansi( h, <%0>, n, %b%1 )
-
-/*
-
-You also need the hook object set up. I've added this before. NOTE that this used to include poseorder + repose, but I've HOPEFULLY removed those  correctly.
-
-Make sure to set &D.OOC.ZONE @hook object <ho>=#1977 -- this is your OOC zone! Which means it'll skip your OOC room(s).
-F.POSEBREAK-ALLOW can be edited to change to a specific room number or something else as need be, but right now points at
-ooc zone.
-
-
-*/
-
-@create @hook object <ho>=10
-&B_@EMIT @hook object <ho>=[u( fn_posebreak, before )]
-&B_@REMIT @hook object <ho>=[u( fn_posebreak, before )]
-&B_NPOSE @hook object <ho>=[u( fn_posebreak, before )]
-&B_NSAY @hook object <ho>=[u( fn_posebreak, before )]
-&B_POSE @hook object <ho>=[u( fn_posebreak, before, pose )]
-&B_POSE/NOSPACE @hook object <ho>=[u( fn_posebreak, before )]
-&B_SAY @hook object <ho>=[u( fn_posebreak, before )]
-&B_PAGE @hook object <ho>=[u(fn_record_page-last-sent)]
-&A_@EMIT @hook object <ho>=[u( fn_posebreak, after )]
-&A_@REMIT @hook object <ho>=[u( fn_posebreak, after )]
-&A_NPOSE @hook object <ho>=[u( fn_posebreak, after )]
-&A_NSAY @hook object <ho>=[u( fn_posebreak, after )]
-&A_POSE @hook object <ho>=[u( fn_posebreak, after, pose )]
-&A_POSE/NOSPACE @hook object <ho>=[u( fn_posebreak, after )]
-&A_SAY @hook object <ho>=[u( fn_posebreak, after )]
-&FN_POSEBREAK @hook object <ho>=iter( filter( fil_posebreak-%0, lcon( loc( %# ), connect )), strcat( setq( 0, objeval( %i0, udefault( %i0/posebreak-%0, udefault( %i0/posebreak, %b )))), objeval( %i0, pemit( %i0, %q0 ))))
-&FIL_POSEBREAK-BEFORE @hook object <ho>=cand( udefault(f.posebreak-allow, 1, %0), strmatch( get( %0/_posebreak ), 1* ) )
-&FIL_POSEBREAK-AFTER @hook object <ho>=cand( udefault(f.posebreak-allow, 1, %0), strmatch( get( %0/_posebreak ), ?1 ) )
-&B_ @hook object <ho>=[u(f.posebreak)]
-&F.POSEBREAK-ALLOW @hook object <ho>=not(strmatch(zone(loc(%0)), [v( d.ooc.zone )]))
-&D.OOC.ZONE @hook object <ho>=#1977
-@set @hook object <ho>=INHERIT
-@set @hook object <ho>=SAFE
-@rxlevel @hook object <ho>= Real Hedge Twilight Shadow All
-@txlevel @hook object <ho>= Real
