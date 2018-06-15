@@ -1,9 +1,10 @@
 @@ @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @@
-@@ NO EDITING OF THIS FILE IS NECESSARY
-@@
-@@ NOT NECESSARY TO PRE-CREATE ANY OBJECTS
-@@
+@@ Lots of editing is needed to make this file work.
+@@ 
+@@ It assumes you have two premade objs - #60 (bbpocket) and #23 mbboard/BBS - Myrddin's Global BBS v4.0.6.
+@@ Find and replace ALL INSTANCES of #23 and #60 w/ the correct dbrefs.
+@@ 
 @@ Just upload this file directly to your game, it will create the
 @@ necessary objects for you and modify all referenced dbref's in the
 @@ code.
