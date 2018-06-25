@@ -130,7 +130,7 @@ which mostly means adding "Character says, "Stuff"." where necessary.
 					strmatch( %qf, sa* ), u( f.format.repose, rest( %qu ), say ),
 					strmatch( %qf, @em* ), u( f.format.repose, rest( %qu ), emit ),
 					strmatch( %qf, @re* ), u( f.format.repose, rest( %qu ), emit ),
-					u( f.format.repose, trim( %qu ), emit ) ) ) ),	
+					u( f.format.repose, edit( trim( %qu ), %\, ), emit ) ) ) ),	
 // This long nasty bit tries to figure out how you posed. Ie, " or @em or etc
 			set( %ql, 
 				u( f.format.repose.attribute, %# ):
