@@ -11,7 +11,7 @@
 	strcat( 
 		setq( l, %0 ),
 		setq( p, %1 ),
-		u( disp.rainbow ), %r,
+		header(), %r,
 		center( %xhScene Cast List%xn for %xh[name(%ql)]%xn, 79 ),%r%r,
 		iter( lcon( %ql, connect ), strcat(
 			setq( f, last( get( ##/finger-wiki ), / ) ),
@@ -22,7 +22,7 @@
 				t( %qf ), %qf,
 				%xh%xxMissing%xn), 
 			|, name( ## ), lit(]]) ), , %,%b), %r,
-		u( disp.rainbow) )
+		footer(+getcast) )
 		
 &f.disp.cast.target #6=
 	strcat(
@@ -41,7 +41,6 @@
 			%xh<+getcast>%xn Target must be a player. )
 			)
 			
-&disp.rainbow #6=%r%xx__%xh__%xn%xm__%xh__%xn%xb___%xh___%xn%xc____%xh____%xn%xg_____%xh_____%xn%xx___%xn%xx_%xh_%xn%xm_%xh_%xn%xb_%xh_%xn%xc_%xh_%xn%xh%xx___%xn%xg%xh_____%xn%xg_____%xc%xh____%xn%xc____%xb%xh___%xn%xb___%xm%xh__%xn%xm__%xx%xh__%xn%xx__%xn
 
 @set #6/c.get.cast=regex
 
