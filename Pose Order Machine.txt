@@ -62,6 +62,8 @@ you can keep tinkering even if the object isn't in the room with you.
 @fo me=&d.ho [v( d.pom )]=search( name=@hook object <ho> )
 @fo me=&d.pom [v( d.ho )]=v( d.pom )
 
+@set [v( d.pom )]=!halt
+
 @desc [v( d.pom )]=[header( Pose Order Machine <POM> )] 
 	%r%rPlease use +poseorder/help for help! 
 	%r%rThis thing was made by skew. %r%r[footer( +poseorder )]
