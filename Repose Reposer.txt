@@ -30,6 +30,8 @@ Note: The reposer uses secure() on the incoming poses, because I had too many is
 @fo me=&d.ho [v( d.rr )]=search( name=@hook object <ho> )
 @fo me=&d.rr [v( d.ho )]=v( d.rr )
 
+@set [v( d.rr )]=!halt
+
 @desc [v( d.rr )]=[header( Repose Reposer <rr> )] 
 	%r%rPlease use +repose/help for help! 
 	%r%rThis thing was made by skew. %r%r[footer( +repose )]
