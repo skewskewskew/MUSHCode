@@ -1,0 +1,110 @@
+
+@@ This code is taken from Fate's Harvest. It was inherited from The Reach and then tweaked by
+@@ Annapurna/Rainbow, Thenomain, and skew (that's me!). 
+
+@@ Please note all DBref numbers are pointing to what they ought to be on Fate's Harvest. Update accordingly!
+
+@@ Once updated, it should go in, copy+paste
+
+
+@create Global +watch Object=10
+@lock Global +watch Object=#1|!#1
+@Aconnect Global +watch Object=@dolist [lwho( )]={ @switch/first [hasflag( %#, DARK )]:[not( u( ##/WATCHON ))]:[udefault( ##/watchall, 0 )]:[and([gt( match( u( ##/friends ), %# ), 0 )],[not(gt(match(u(##/watch_suppress),%#),0))])]:[gt( match( u( NOWATCH ), %# ), 0 )]:[gt( match( u( %#/watchpermit ), ## ), 0 )]=0:1:1:*:0:*, { @pemit ##=u( display.hasconnected, ##, %# )}, 0:1:0:1:0:*, { @pemit ##=u( display.hasconnected, ##, %# )}, 0:1:0:1:1:1, { @pemit ##=u( display.hasconnected, ##, %# )}};
+@Adisconnect Global +watch Object=@dolist [lwho()]={@switch/first [hasflag(%#,DARK)]:[not(u(##/WATCHON))]:[udefault(##/watchall,0)]:[and([gt( match( u( ##/friends ), %# ), 0 )],[not(gt(match(u(##/watch_suppress),%#),0))])]:[gt(match(u(NOWATCH),%#),0)]:[gt(match(u(%#/watchpermit),##),0)]=0:1:1:*:0:*, {@pemit ##=[udefault(##/watchfmt,<Watch> [moniker(%#)] has disconnected.,disconnected)]},0:1:0:1:0:*,{@pemit ##=[udefault(##/watchfmt,<Watch> [moniker(%#)] has disconnected.,disconnected)]},0:1:0:1:1:1,{@pemit ##=[udefault(##/watchfmt,<Watch> [moniker(%#)] has disconnected.,disconnected)]},}
+&CREDITS Global +watch Object=+watch was coded by Alton/Cedric@Tir Rauhd and Watchman@Haven. It was debugged and improved by Pennance@DenverMUSH and coders on The Reach MUX. It may be copied freely.
+&DO.ADDWATCHER Global +watch Object=$+watch/add *:@swi [type(*%0)]=PLAYER,{&friends %#=[setunion(get(%#/friends),num(*%0))];@pemit %#=<Watch> You have added [moniker(*%0)] to your watch list.},{@pemit %#=<Watch> Sorry, %0 isn't a player.}
+&DO.DELWATCHER Global +watch Object=$+watch/del *:@assert cor(t(setr(w, locate(%#, %0, ap))), t(setr(w, pmatch++(%0))))={@pemit %#=<Watch> I can't find '%0' on the game.}; @assert t(match(setr(f, get(%#/friends)), %qw))={@pemit %#=<Watch> I can't find '[moniker(%qw)]' on your watch list.}; &friends %#=[remove(get(%#/friends), %qw)]; @pemit %#=<Watch> You have removed '[moniker(%qw)]' from your watch list.
+&DO.HIDEWATCHER Global +watch Object=$+watch/hide:&NOWATCH me=[setunion(v(NOWATCH),num(%#))];@pemit %#=<Watch> You are now hiding from the Watcher code.
+&DO.UNHIDEWATCHER Global +watch Object=$+watch/unhide:&NOWATCH me=[remove(get(me/NOWATCH),%#)];@pemit %#=<Watch> Your login and logouts may now be monitored.
+&DO.WATCH Global +watch Object=$+watch:@pemit %#=strcat(<Watch> Watched players currently connected:%b, setq( w, filter( filter.watchable, setinter( get( %#/friends ), objeval( %#, lwho( ))), , , %#)), setq( a, sortby( sortby.name, filter( filter.notfrozen, %qw ))), setq( f, sortby( sortby.name, filter( filter.frozen, %qw ))), if( t( %qw ), strcat( iter( %qa, strcat( moniker( ## ), u( display.optional-watchnote, %#, %i0 )), , %,%b ), if( cand( t( %qa ), t( %qf )), %,%b ), iter( %qf, ansi( xh, moniker( ## ), u( display.optional-watchnote, %#, %i0 )))), ansi( xh, None )))
+&DO.WHOWATCHER Global +watch Object=$+watch/who:@pemit %#=strcat( <Watch> You are currently watching for%b, setq( w, get( %#/friends )), setq( a, sortby( sortby.name, filter( filter.notfrozen, %qw ))), setq( f, sortby( sortby.name, filter( filter.frozen, %qw ))), if( t( %qw ), strcat( iter( %qa, u( display.wholine, %i0 )), iter( %qf, u( display.wholine, %i0, xh )), ), nobody. (See '+watch/help' to add some.) ))
+&DO.HELPWATCHER Global +watch Object=$+watch/help:@pemit %#=<Watch> The following are commands available for +watch:%r%r+watch [space(11)]-- shows you who is connected that you are watching.%r+watch/on [space(8)]-- <default> turns on the watch code after it has been turned off.%r+watch/off [space(7)]-- turns off the Watch without removing your list.%r+watch/who [space(7)]-- displays everyone on your watch list and connect status.%r+watch/where [space(5)]-- displays where everyone on your watch list is%r+watch/hide [space(6)]-- hides you from the +watch.%r+watch/unhide [space(4)]-- allows others to watch your logins and disconnects.%r+watch/per <name> -- permits <name> to see you while hiding.%r+watch/rem <name> -- removes <name> from seeing you while hiding.%r+watch/add <name>[space(1)]-- adds <name> to your watch list.%r+watch/del <name>[space(1)]-- removes <name> from your watch list.%r+watch/page <message> -- sends <message> as a page to those on your watch list.%r+watch/all on [space(4)]-- allows you to watch all logins and disconnects.%r+watch/all off [space(3)]-- prevents you from watching all logins and disconnects.%r%rYou may also set the format by which you see logins and disconnects. To do this, set &WATCHFMT me=%%n has %%0. Other useful commands you might add could be %[time()], %%# or whatever.%r%rAlso, you may set an AWATCH attribute on yourself that will be triggered when someone logs in.%r%r<Watch> +watch was coded by Alton/Cedric@Tir Rauhd and Watchman@Haven. It may be copied freely.
+&DO.ALLWATCHER Global +watch Object=$+watch/all *:@swi %0=ON,{&watchall %#=1;@pemit %#=<Watch> You are now watching all logins and disconnects.},{&watchall %#;@pemit %#=<Watch> You are no longer watching all logins and disconnects.}
+&DO.PERMITWATCH Global +watch Object=$+watch/per *:@swi [type(*%0)]=PLAYER,{&watchpermit %#=[setunion(get(%#/watchpermit),num(*%0))];@pemit %#=<Watch> You have added [moniker(*{%0})] to your permission list, %rfor when you are hidden from the watch command.},{@pemit %#=<Watch> Sorry, %0 isn't a player.}
+&DO.UNPERMWATCH Global +watch Object=$+watch/rem *:&watchpermit %#=[remove(get(%#/watchpermit),num(*%0))];@pemit %#=<Watch> You have removed [moniker(*%0)] from your hidden permission list.
+&FN.WATCHALERT Global +watch Object=@pemit %1=[udefault(%1/friends,<Watch> [moniker(%0)](%0) has connected.,connected)];@trig/quiet %0/awatch=[moniker(%1)], %1
+&DO.WPAGE Global +watch Object=$+watch/page *:@dolist get(%#/friends)=@switch objeval(%#,hasflag(##,connect))=1,{@fo %#=page ##={%0}},0,
+
+@@ People/things that cannot be watched
+&NOWATCH Global +watch Object=#1
+
+&DO.WATCHON Global +watch Object=$+watch/on:@pemit %#=<Watch> Watcher code is now turned on.;&WATCHON %#=0
+&DO.WATCHOFF Global +watch Object=$+watch/off:@pemit %#=<Watch> Watcher code is now turned off.;&watchon %#=1
+&CMD.WATCH.CLEANUP Global +watch Object=$+watch/cleanup: think friends (qf): [setr( f, get( %#/friends ))] %rnon-approved (qn): [setr( n, filter( filter.notapproved, %qf ))] %rnon-players (qp): [setr( p, filter( filter.notplayer, %qf ))] %rsetting: [set( %#, FRIENDS:[setdiff( %qf, %qn %qp )])] %rclear notes: [iter( %qn %qp, set( %#, watchnote-%i0: ), , @@ )] %rreport: [game(%#, Watch list cleared of frozen and non-players. )]
+&CMD.WATCH/NOTE Global +watch Object=$+watch/note*:@assert t( setr( 0, trim( %0 )))={ @pemit %#=strcat(setq( w, edit( lattr( %#/watchnote-* ), WATCHNOTE-, )), setq( a, sortby( sortby.name, filter( filter.notfrozen, %qw ))), setq( f, sortby( sortby.name, filter( filter.frozen, %qw ))), <Watch> Your watchnotes are:, if( t( %qw ), strcat( iter( %qa, %r%t- [moniker(%i0)] (%i0): [get( %#/watchnote-%i0 )] ), iter( %qf, %r%t- [ansi( xh, [moniker(%i0)] (%i0))]: [get( %#/watchnote-%i0 )] ), ), %b(none))); }; think setr( l, 33 ); think setr( b, trim( before( %q0, = ))); think setr( a, trim( after( %q0, = ))); think setr( s, strmatch( %q0, *=* )); @assert setr( p, pmatch++( %qb ))={ @pemit %#=<Watch> I can't find that player.; }; @assert %qs={ @pemit %#=Current watchnote for [moniker( %qp )]: [if( t(setr( n, get( %#/watchnote-%qp ))), %qn, No note. )]; }; @assert lte( setr( k, strlen( %qa )), %ql )={ @pemit %#=<Watch> Watchnote can't be longer than %ql characters. Yours is %qk.}; &watchnote-%qp %#=%qa; @assert strmatch( get( %#/watchnote-%qp ), %qa )={@pemit %#=<Watch> Watchnote not successfully set! (I don't know why.)}; @break t( %qa )={ @pemit %#=Set watchnote for '[moniker( %qp )]' to '%qa'.}; @pemit %#=Unset watchnote for '[moniker( %qp )]'.
+&CMD.WATCH/SUPPRESS Global +watch Object=$+watch/suppress *:@pemit %#=[switch(gt(match(get(%#/FRIENDS),[setq(1,pmatch(%0))]%q1),0),1,<Watch> You have suppressed connection messages from [moniker(%q1)]. Type +watch/unsuppress [moniker(%q1)] to turn them back on.[set(%#,WATCH_SUPPRESS:[setunion(get(%#/WATCH_SUPPRESS),%q1)])],<Watch> That person is not on your watch list.)]
+&CMD.WATCH/UNSUPPRESS Global +watch Object=$+watch/unsuppress *:@pemit %#=[switch(gt(match(get(%#/FRIENDS),[setq(1,pmatch(%0))]%q1),0),1,<Watch> You have unsuppressed connection messages from [moniker(%q1)].[set(%#,WATCH_SUPPRESS:[setdiff(get(%#/WATCH_SUPPRESS),%q1)])],<Watch> That person is not on your watch list.)]
+&CMD.WATCH/SUPPRESSED Global +watch Object=$+watch/suppressed:@pemit %#=<Watch> You have the following people suppressed: [switch(words(get(%#/WATCH_SUPPRESS)),0,Nobody,[itemize([iter(get(%#/WATCH_SUPPRESS),[moniker(##)],,|)],|)])]
+&FILTER.APPROVED Global +watch Object=isapprovedmore( %0, %1 )
+&FILTER.NOWATCH Global +watch Object=member( u( NOWATCH ), %0 )
+&FILTER.WATCHABLE Global +watch Object=cand( cor( not( member( u( NOWATCH ), %0 )), member( get( %0/watchpermit ), %1 )), hastype( %0, PLAYER ))
+&FILTER.NOTFROZEN Global +watch Object=not( u( filter.frozen, %0, frozen ))
+&FILTER.FROZEN Global +watch Object=cor( u( filter.approved, %0, frozen ), u( filter.approved, %0, permafrozen ), u( filter.approved, %0, stafffrozen ))
+&FILTER.NOTAPPROVED Global +watch Object=not( isapprovedmore( %0, %1 ))
+&FILTER.NOTPLAYER Global +watch Object=not( hastype( %0, PLAYER ))
+&SORTBY.NAME Global +watch Object=comp( moniker( %0 ), moniker( %1 ))
+&DISPLAY.WHOLINE Global +watch Object=strcat( setq( n, cat( moniker( %0 ), (%0) )),setq( o, if( objeval( %#, hasflag( %0, connected )), Connected, Offline )),%r%t-%b, ansi( n%1, %qn ),%b, repeat( ., sub( 35, strlen( %qn ))),%b, ljust(exptime(idle(%0)),10),%b, %qo, u( display.optional-watchnote, %#, %0 ) )
+&DISPLAY.HASCONNECTED Global +watch Object=udefault( %0/watchfmt, <Watch> [moniker( %1 )] has connected.[u( display.optional-watchnote, %0, %1 )], connected )
+&DISPLAY.OPTIONAL-WATCHNOTE Global +watch Object=if( t( setr( n, get( %0/watchnote-%1 ))), ansi( xh, %b(%qn) ))
+
+@@ This links +watch to Thenomains Brand New Who Where: https://github.com/thenomain/Mu--Support-Systems/tree/master/Brand%20New%20Who%20Where
+@fo me=&D.BNWW Global +watch Object=[search( name=Brand New Who-Where <bnww> )]
+
+&PREFIX.COMMANDS Global +watch Object=c. cmd. c_ cmd_ do. do_
+&C.WATCH/WHERE Global +watch Object=$^\+?watch/where:@pemit %#=strcat( setq( w, filter( filter.watchable, setinter( get( %#/friends ), objeval( %#, lwho( ))), , , %# )), setq( r, setinter( u( v( d.bnww )/f.where.rooms, %# ), iter( filter( v( d.bnww )/fil.findable, %qw, , , %# ), room( %i0 )))), u( v( d.bnww )/display.where.complete, %#, %qr, %qw ));
+@set Global +watch Object/C.WATCH/WHERE = regexp
+
+@@ I added this. +watch/stop <name> stops you from watching <name>.
+&DO.STOPWATCHER Global +watch Object=$+watch/stop *:@assert cor(t(setr(w, locate(%#, %0, ap))), t(setr(w, pmatch++(%0))))={@pemit %#=<Watch> I can't find '%0' on the game.}; @assert t(match(setr(f, get(%#/friends)), %qw))={@pemit %#=<Watch> I can't find '[moniker(%qw)]' on your watch list.}; &friends %#=[remove(get(%#/friends), %qw)]; @pemit %#=<Watch> You have removed '[moniker(%qw)]' from your watch list.
+@set Global +watch Object=INHERIT
+@set Global +watch Object=SAFE
+@set Global +watch Object=STICKY
+@rxlevel Global +watch Object= Real Hedge Twilight
+@txlevel Global +watch Object= Real Hedge Twilight
+
+@@ Parent it! The below might not work. Update dbref as necessary.
+@fo me=@parent Global +watch Object=[search( name=Code Object Data Parent <codp> )]
+
+@@ @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@  HELP FILE!!! 
+@@  Don't copy paste this part!
+@@ @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+
+==============================================================================
+                           Fate's Harvest Helpfiles
+------------------------------------------------------------------------------
+
++Watch Command
+
+This command allows you to see when your friends log on or off from the game.  You can see where they are, 
+
+  +watch                 Displays connected players on your +watch list.
+  +watch/who             Show your entire +watch list/their connection status.
+  +watch/where           Show where the people on your watch list are.
+
+  +watch/add <name>      Add <name> to your watch list.
+  +watch/del <name>      Take <name> off of your watch list.
+  +watch/stop <name>     Alias for +watch/del
+
+  +watch/on              (default: on) Start watching the players on your list.
+  +watch/off             Stop seeing the dis/connections of your watch list.
+
+
+  +watch/hide*            Prevents people from seeing you log on/disconnect.
+  +watch/unhide          Allows other players to see your connections again.
+
+* It is worth noting that this only affects the +watch command.  People can still see that you are currently online via other means (who, +who, etc.), but they won't have the immediate "<Your Name> has connected." message from +watch.
+
+  +watch/per <name>      WHILE HIDING: Add <name> to list of people permitted
+                         to see your connections/disconnections.
+  +watch/rem <name>      WHILE HIDING: Remove <name> from the above list.
+
+
+
+  +watch/page <message>  Pages <message> to everyone on your watch list.
+
+
+See '+help watch2' for how to set up a custom version of the standard login/disconnection message.  If you're code-allergic, take a cootie shot... :)
+
+==============================================================================
