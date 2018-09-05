@@ -70,7 +70,7 @@
 @@  Don't copy paste this part!
 @@ @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
-
+@@ +help watch
 ==============================================================================
                            Fate's Harvest Helpfiles
 ------------------------------------------------------------------------------
@@ -106,5 +106,65 @@ This command allows you to see when your friends log on or off from the game.  Y
 
 
 See '+help watch2' for how to set up a custom version of the standard login/disconnection message.  If you're code-allergic, take a cootie shot... :)
+
+==============================================================================
+
+@@ +help watch2
+
+==============================================================================
+                           Fate's Harvest Helpfiles
+------------------------------------------------------------------------------
+
++Watch Command, cont.
+
+You may set a custom format for connection/disconnection notices via the following attribute:
+  &WATCHFMT me=<stuff>
+
+The default attribute is:
+  &WATCHFMT me=%n has %0.
+
+  <Watch> Rebecca has connected.
+  <Watch> Rebecca has disconnected.
+
+%n = the name of the player
+%0 = connected/disconnected
+
+Those will never change.  Keep them in whatever you do.
+
+If you want a timestamp, for example, you could set your attribute to:
+  &WATCHFMT me=%n has %0 on [time()].
+
+  <Watch> Rebecca has connected on Sun August 15 11:04:13 2016.
+
+--
+
+CODE NOTE
+
+For those unfamiliar with code, time() is a "function" -- it performs a specific function based on whatever is between its ().  In this case, we are using the default of "the current time" and don't need to put anything inside of the parentheses.
+
+When using functions inside normal text, wrap them up in a [] sandwich to let the system know "HEY, there's a function here!"
+
+--
+
+If you want more creative freedom with your timestamp messages, the timefmt() function may be more to your cup of tea.  Check 'help timefmt' to see the writeup.
+
+Example:
+
+  &WATCHFMT me=%xh%xm%n%xn, the future love of my life, has %0 on [timefmt($A\, the $dth day of $B at $R.)]
+
+  <Watch> Rebecca, the future love of my life, has connected on Sunday, the 15th day of August at 11:04.
+
+--
+
+CODE NOTE
+
+If you want [] or {} in your timestamp, you will need to 'escape' them.  Per the code note above, the system reads brackets and assumes that things inside of them are Important.  If you put a % or \ in front of the [, it will know that the [ is supposed to be treated like regular text.
+
+--
+
+
+CREDITS NOTE:
+
++watch was coded by Alton/Cedric@Tir Rauhd and Watchman@Haven. It may be copied freely.
 
 ==============================================================================
