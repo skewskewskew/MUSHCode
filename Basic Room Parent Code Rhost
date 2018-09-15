@@ -35,6 +35,25 @@ So it stays!
 
 This goes wherever your user/softcode/custom functions live.
 */
+/*
+--- wheader/wfooter ----
+I use these. They take width(%#) and span stuff to fill. Now, there's no width() in Rhost, so I added it
+to the softcode functions.
+
+Here's width():
+&fun_width *function holder*=[default(%0/width,78)]
+
+And here's a super simple wheader() - note the %0 at the end, that'll be what goes inside the ():
+&fun_wheader *function holder*=[printf($^[width(%#)]:%cc=:s,%ch%0)]
+
+*/
+/*
+--- Name Format -----
+It's really pretty simple. It formats the name of the room. You can make this fancy, or set up a different 
+room header pretty easily. 
+*/
+
+&nameformat Room Parent=[wheader( cname( me ))]
 
 /*
 --- ConFormat -----
