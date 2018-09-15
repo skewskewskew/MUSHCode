@@ -1,0 +1,166 @@
+/*
+I seen a million or more room formats that made no sense to me, so I had to make my own.
+
+This is meant to be extremely basic, with a few functions/filters built in to do some fun stuff.
+
+Use as you wish! This is made for Rhost, so printf() and rhost columns() in use!
+
+Sample output:
+--------------------------------- The Lounge ---------------------------------
+
+	This is where you hang out and strangers emote hugs at you. 
+
+ - - - - - - - - - - - - - - - - - Players - - - - - - - - - - - - - - - - - -
+  *  Character       Desc                                               Idle
+  *  skew            It's probably a vampire.                             0s
+  *  Ashen-Shugar    It's probably a vampire.                             6h
+ - - - - - - - - - - - - - - - - - Objects - - - - - - - - - - - - - - - - - -
+     Code Object Data Parent < It's probably a vampire.                   0s
+ - - - - - - - - - - - - - - -  Obvious Exits  - - - - - - - - - - - - - - - -
+     Quiet <QR>              
+------------------------------------- OOC ------------------------------------
+*/
+
+/*
+--- Short Desc -----
+
+I have a shortdesc() function that's in use here. It looks like this:
+
+&fun_shortdesc *function holder*=
+  [switch( 1, hasattr( %0, short-desc ), u( %0/short-desc ), It's probably a vampire. )]
+
+If the player/object has a short desc, display it. If not, display default. I should probably add a second
+check that will determine if you're a player or object, but this showing up for objects made someone laugh.
+So it stays!
+
+This goes wherever your user/softcode/custom functions live.
+*/
+
+/*
+--- ConFormat -----
+Short for "contents formats". Contents are the players and objects within. This code will show you as in
+the room you're in cause I like it that way. NOTE: This code will PROBABLY show dark characters. I hope
+so, at least, because I don't think people hiding in rooms is ok.
+
+Column 1: Char type
+  The first column (marked as * above) is designed to use Thenomain's isapproved() code. If this doesn't
+work for you, change "isapproved( ##, status )" to something that makes sense, such as bittype(). The
+output feeds into f.chartype, and outputs a (max) 3-char identifier. The idea here is to have it show
+staff (red *), NPC, ST (story teller), or blank for PC.
+
+Column 2: Character name
+  This uses cname() so will pick up the @ansiname if in use.
+  
+Column 3: Desc
+  Actually the short desc. This uses shortdesc()! See above. My hope is to fiddle with shordesc() later
+  and make it show extra fancy information or something. For now, should just output &short-desc.
+  
+Column 4: Idle
+  I just like it, ok? Shows how long people have been idled in the room.
+  
+Objects just show their name then shortdesc(). They used to show idle so I could check up on them and
+stop the
+
+/*
+
+@conformat Room Parent=
+	[wdivider( Players )]%r
+	[setq( p, lcon( me, connect ))]
+	[setq( o, lcon( me, object ))]
+	[printf( %b$^3s $-15s $-[sub( width(%#), 28 )] s$5s,*,Character,Desc,Idle)]%r
+	[iter( %qp, 
+		printf( %b$^3s $-15s $-[sub( width(%#), 28 )] s$5s,
+// printf() looks scary but: $-15s = left align 15 spaces. $ and s mark the start and stop.
+      u( f.chartype, isapproved( ##, status )), 
+			cname(##), 
+			shortdesc(##), 
+			singletime( idle(##) )), , %r )]
+	[if( t( %qo ),
+		%r[wdivider( Objects )]%r
+		[iter( %qo, 
+			printf( %b$^3s $-25s $-[sub( width(%#), 38 )] s$5s,	
+			u( f.chartype, isapproved( ##, status )), 
+			cname(##), 
+			shortdesc(##), 
+			singletime( idle(##) )), ,%r )], @@( no objects show nothing ) )]
+
+// This switches the 3 chars that appear in the left column. For now it only marks staff or NPC.
+&f.chartype Room Parent=switch( %0, staff, %ch%cr*, npc, %ch%cbNPC, )
+
+/*
+--- Exits -----
+Two filters:
+* Directions looks for d.direction on the *exit*. If you want your exit listed as a direction, then
+make sure to &d.direction exit=1
+* Exits are everything else.
+
+Unlike above, this will filter dark exits out. You only see them if you're the owner or staff.
+
+In the footer, it includes _GRID - this is what you'll use as your grid coordinates. This should be
+set PER ROOM. Room Parent will be set to "OOC" and all unmarked rooms will show as OOC.
+*/
+
+@exitformat Room Parent=
+	[if( t( setr( d, filter( fil.directions, lexits( me, | ) ) ) ),
+		[wdivider( Directions )]%r
+		[columns( 
+			iter( %qd, strcat( 
+				elementsmux( fullname( ## ), 1 ), %b,
+				u( f.exitcolor, ## ) ), |, | ),
+			floor( div( sub( width( %# ), 5 ), 3 ) ), 3, l, 0, 0, %b%b%b%b%b, , , 1, | )]%r, 
+			@@( no directions ) )]
+	[if( t( setr( e, filter( fil.exits, lexits( me, | ) ) ) ),
+		[wdivider( Obvious Exits )]%r
+		[columns( 
+			iter( %qe, strcat( 
+				elementsmux( fullname( ## ), 1 ), %b,
+				u( f.exitcolor, ## ) ), |, | ),
+			floor( div( sub( width( %# ), 5 ), 3 ) ), 3, l, 0, 0, %b%b%b%b%b, , , 1, | )]%r, 
+			@@( no exits ) )]
+	[wfooter( u( _GRID ) )]
+
+// Filter directions. Again, we're looking for d.direction ON THE EXIT
+&fil.directions Room Parent=and( get( %0/d.direction ), 
+		cor( not( hasflag( %0, dark ) ), 
+			isstaff(%#), 
+			match( owner( %0 ), %# )))
+
+// All exits that do not have d.direction set to 1.
+&fil.exits Room Parent=and( not( get( %0/d.direction ) ), 
+		cor( not( hasflag( %0,dark ) ), 
+			isstaff(%#), 
+			match( owner( %0 ), %# )))
+
+// This here sets up the exit alias (Such as Upstairs <U>). It's set aside because it can be
+// expanded on to add fancy colors. Like, private exits vs public? Hedge vs reality? Whatever.
+// Right now it just sets everything the same color.
+&f.exitcolor Room Parent=ansi( n, <, h, [elementsmux( fullname( %0 ), 2, ; )], n, > )
+
+&_GRID Room Parent=OOC
+
+/*
+--- Desc -----
+When a new room is dug, it will display this. So, set something clever, or if you can't be
+helpful, then set it to something helpful.
+*/
+
+@desc #42=%r%tThis is an undesced room. You should probably describe it.%r
+
+/*
+--- To be continued? ----
+The big thing this doesn't cover is &formatdesc (or @descformat on Mux). &formatdesc basically acts
+like a box that you put your desc into. From the Rhost help files:
+
+    > lo me
+      -< This is a test >-
+    > &formatdesc me===<%0>==
+    > lo me
+      ===<This is a test>===
+
+The desc is "This is a test". The formatdesc is the stuff around it. When you look at the player, it
+outputs the &formatdesc with your desc as %0. So, hopefully that helps.
+
+Oh, and why am I writing this like I'm talking to a person? Becuase I'm writing it for me.
+
+Hi, future skew.
+*/
