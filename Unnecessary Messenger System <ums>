@@ -13,6 +13,9 @@ set up to allow expansion.
 
 For now, it's just +txt.
 
+THIS IS MEANT TO BE READ WITH MUXIFY! http://muxify.musoapbox.net/editor.html
+
+
 ================================================================================
 
 Table design notes:
@@ -640,7 +643,7 @@ This is using elements() not variables, so...
 					ljust( ansi( h, timefmt( $m/$d $H:$M,
 						u( f.time.sql2unix, elements( ##, 2, | ) ) ) ), 12 ),
 					ljust( ansi( %qh, name( elements( ##, 4, | ) ) ), 11, ), %b,
-					ljust( ansi( %qh, itemize( iter( elements( ##, 5, | ),
+					ljust( ansi( %qh, itemize( iter( elements( [secure( ## )], 5, | ),
 					 	name( [itext(0)] ) ) ) ), 16, ), %b,
 					ljust( ansi( %qt, elements( ##, 6, | ) ), sub( width( %# ), 48 ) ) ), ~, %r ), %r,
 			wfooter( [v( d.txt.footer.name )] ) ),
