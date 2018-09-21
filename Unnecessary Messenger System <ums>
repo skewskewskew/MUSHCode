@@ -792,13 +792,13 @@ this one here:
 				u( .msg, TXT, You have [u( .plural, [rest( ##, | )], unread txt message, unread txt messages)]! ) ) ), ~ )
 
 &sql.txt.hourly [v( d.ums )]=
-	SELECT
-		owner_objid, count(message_num)
-	FROM
-		message_log
-	where
-		status='unread'
-	GROUP BY owner_objid
+	SELECT 
+		owner_objid, count(message_num) 
+	FROM 
+		message_log 
+	where 
+		status='unread' 
+	GROUP BY owner_objid 
 
 	// on connect
 
@@ -807,13 +807,13 @@ this one here:
 		{@pemit %#=u( .msg, TXT, You have [u( .plural, [rest( %q9, | )], unread txt message, unread txt messages)]! )}
 
 &sql.txt.connect [v( d.ums )]=
-	SELECT
-		owner_objid, count(message_num)
-	FROM
-		message_log
-	where
-		status='unread' and owner_objid='[u( .objid,  %# )]'
-	GROUP BY owner_objid
+	SELECT 
+		owner_objid, count(message_num) 
+	FROM 
+		message_log 
+	where 
+		status='unread' and owner_objid='[u( .objid,  %# )]' 
+	GROUP BY owner_objid 
 
 /*
 
