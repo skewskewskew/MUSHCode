@@ -1045,8 +1045,8 @@ This is using elements() not variables, so starts at 1
 								u( f.time.sql2unix, elements( %qs, 2, | ) ) ) ), 12 ),
 				ljust( ansi( %ql, From: ), 6 ),
 				ljust( ansi( %qh, strcat( 
-					name( elements( %qs, 4, | ) ), /,
-					name( elements( %qs, 5, | ) ) ) ), 20),
+					name( elements( %qs, 3, | ) ), /,
+					name( elements( %qs, 4, | ) ) ) ), 20),
 				ljust( ansi( %ql, To: ), 4 ),
 				ljust( ansi( %qh, itemize( iter( elements( %qs, 5, | ),
 				 	name( pmatch( ## ) ) ) ) ), 15 ), /,
