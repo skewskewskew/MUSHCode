@@ -4,6 +4,10 @@ unnecessary messenger system.
 
 This whole thing is written by skew, with help from, like, everyone.
 
+Extra credit to Ashen-Shugar@RhostMUSH who not only helped with a lot of
+the TinyMUX->Rhost conversion, but also updated Rhost with some additional
+functionality!
+
 Why unnecessary? Because certain people think it is! Me? I don't.
 
 The <ums> is designed to be a code suite, starting with +txt but also being
