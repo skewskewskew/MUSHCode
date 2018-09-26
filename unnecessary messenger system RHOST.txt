@@ -1,0 +1,1106 @@
+
+/*
+unnecessary messenger system.
+
+This whole thing is written by skew, with help from, like, everyone.
+
+Why unnecessary? Because certain people think it is! Me? I don't.
+
+The <ums> is designed to be a code suite, starting with +txt but also being
+expanded for features like +email, +wantrp, +inform, and several other things.
+The data is all stored in SQL **YOU MUST HAVE SQL** and the table is, hopefully,
+set up to allow expansion.
+
+For now, it's just +txt.
+
+THIS IS MEANT TO BE READ WITH MUXIFY! http://muxify.musoapbox.net/editor.html
+
+Note: This was originally designed for TinyMUX. It's been updated to work on
+Rhost. Mostly that meant putting in printf() and changing escapes().
+
+================================================================================
+
+Table design notes:
+
+When a message is sent, both sender and receiver will "own" a copy. The owner
+is flagged as owner. By linking owner to sender or receiver, you can do incoming
+and outgoing, but I have skipped that all. If someone pulls up their last msgs,
+it's just everything they own.
+
+Owner Ref - Whose log entry is this? See your own stuff, dont' care who it's to/from
+Owner Name - For easy reading/sorting.
+
+Message_num - Unique key for the owner.
+
+Sender - Dbref of sender
+Spoof sender - Future consideration.
+Receiver - Dbref of receiver (space separated list if multiple)
+Spoof receiver - Future consideration.
+
+Target Type - Was it sent to a player, a faction, something else?
+Message Type - Is it a txt, an e-mail, a reminder...?
+
+Date Sent - Yep
+Status - Read unread new completed deleted etc
+Date Completed - If applicable
+
+Subject - As in, the subject line of an e-mail
+
+Message - Yep
+
+================================================================================
+== SETUP =======================================================================
+
+First, the SQL part. You can run this through sql() in game, but I'm not
+going to format it for that, because messing with sql should be done with
+caution.
+
+Note: MySQL 5.6.+ allows two or more TIMESTAMP columns in a table. If you have
+an older version of MySQL (or MariaDB), you will need to drop the bit for
+date_completed that reads "ON UPDATE CURRENT_TIMESTAMP". This is not currently
+in use so should not be an issue.
+
+-- CREATE TABLE ----------------------------------------------------------------
+
+DROP TABLE IF EXISTS message_log;
+
+--
+
+CREATE TABLE IF NOT EXISTS message_log (
+	owner_objid VARCHAR(255) NOT NULL,
+	owner_name VARCHAR(255) NOT NULL,
+
+	message_num BIGINT UNSIGNED NOT NULL DEFAULT 0,
+
+	sender VARCHAR(255),
+	spoof_sender VARCHAR(255),
+	receiver VARCHAR(255),
+	spoof_receiver VARCHAR(255),
+
+	target_type VARCHAR(255) NOT NULL,
+	message_type VARCHAR(255) NOT NULL,
+
+	date_sent TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	status VARCHAR(255) NOT NULL,
+	date_completed TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP,
+
+	subject VARCHAR(255) NOT NULL,
+	message VARCHAR(15000) NOT NULL,
+
+	entry_num BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+
+	PRIMARY KEY (owner_objid, message_num),
+	INDEX (entry_num)
+) ENGINE=INNODB CHARSET=UTF8;
+
+
+================================================================================
+== Creation and stuff... =======================================================
+
+*/
+
+@create Unnecessary Messenger System <ums>=10
+@set ums=inherit safe
+
+@fo me=&d.ums me=[num( Unnecessary Messenger System <ums> )]
+
+@fo me=&d.cron [v( d.ums )]=[search( name=Globals: CRON - Myrddin's )]
+@fo me=&d.cron me=[search( name=Globals: CRON - Myrddin's )]
+
+@fo me=@parent [v( d.ums )]=[search( name=Code Object Data Parent <codp> )]
+
+&prefix.sql [v( d.ums )]=sql.
+&prefix.validations [v( d.ums )]=validate.
+
+/*
+--------------------------------------------------------------------------------
+-- Short Functions -------------------------------------------------------------
+*/
+
+// If you do not have the same isapproved() from ThenoCode, you can update here.
+// ThenoCode: isapproved( name ) or isapproved( name, approval flag )
+&.isapproved [v( d.ums )]=isapproved( %0, %1 )
+
+// Used to display messages. Captures default color prefs + player color prefs
+&.msg [v( d.ums )]=strcat(
+	setq( l, edefault( %0/pref.txt.lowlight, [u( d.lowlight )] ) ),
+	setq( h, edefault( %0/pref.txt.highlight, [u( d.highlight )]) ),
+	setq( t, edefault( %0/pref.txt.mlight, [u( d.mlight )] ) ),
+	ansi( %ql, <%0>, %qt, %b%1 ) )
+
+&.highlight [v( d.ums )]=edefault( %0/pref.txt.highlight, [v( d.highlight )] )
+&.lowlight [v( d.ums )]=edefault( %0/pref.txt.lowlight, [v( d.lowlight )] )
+&.mlight [v( d.ums )]=edefault( %0/pref.txt.mlight, [v( d.mlight )] )
+
+// using this instead of the ufunc plural().
+&.plural [v( d.ums )]=if( eq( %0, 1 ), %0 %1, %0 %2 )
+
+// Connected or not?
+&.connected [v( d.ums )]=[if( hasflag( pmatch( %0 ), connect ) , read, unread )]
+
+
+/*
+--------------------------------------------------------------------------------
+-- Object ID  ------------------------------------------------------------------
+
+The unique identifier for an object, taken from Penn.
+Outputs: <#dbref>:<creation time in secondss>
+
+Ex: #1448+1465215059.698417
+
+ThenoCode has objid() installed as a function. Rhost and Penn have it. TinyMux
+does not. So, here's two options... Best option: Theno's function.
+
+&UFUNC/PRIVILEGED.objid Global Functions=if( t( setr( p, pmatch( %0 ))),
+	strcat( %qp, +, convtime( get( %qp/created ), UTC, 6 )), %qp )
+	
+Acceptable option: In-code objid.
+
+&.objid [v( d.ums )]=localize( 
+		if( t( setr( l, locate( %#, %0, * ))), 
+			[num( %ql )]:[convtime( get( %ql/created ))], 
+			#-1 NOT FOUND 
+		)
+	)
+	
+This code will use .objid and call objid(). Edit to something else if you need.
+*/
+
+&.objid [v( d.ums )]=objid( %0 )
+
+/*	
+================================================================================
+== SQL FUNCTIONS ===============================================================
+
+Things related to SQL and converting to and from a table or database.
+
+--------------------------------------------------------------------------------
+-- SQL Escape ------------------------------------------------------------------
+
+I removed the nested edits, here. Rhost and TinyMUSH will choke here.
+
+For Rhost: use pedit - exact same thing otherwise.
+
+Note there's two secures here, and the text goes through both. One makes things
+SQL compliant, one MU compliant. | and ~ are removed because I use them in the
+code itself.
+
+*/
+
+&f.sql.escape [v( d.ums )]=pedit( %0, \\, \\\\\\, ', \\\\', ", \\\\", \%, \\\\\\\% )
+
+&f.secure.message [v( d.ums )]=pedit( %0 , lit( [ ), , lit( ] ), , ~, -, |, :, ;, : )
+
+
+/* -- test --
+
+think u( v( d.ums )/f.sql.escape, lit(She said, "Oh my god!". \\ I said, "Relax; It's only a test."))
+
+--------------------------------------------------------------------------------
+-- Time: unix2sql --------------------------------------------------------------
+
+UNIX is MU time. SQL has it's own time. Any time you go back and forth, you need
+to use these.
+
+0: secs.
+
+*/
+
+&f.time.unix2sql [v( d.ums )]=if( %0,  ptimefmt( $Y-$m-$d $H:$M:$S $z, %0 ), none )
+
+/* -- test --
+
+think u( v( d.ums )/f.time.unix2sql, secs())
+
+think sql( SELECT FROM_UNIXTIME( [secs()] ))
+think timefmt( $Y-$m-$d $H:$M:$S $z, secs())
+
+
+--------------------------------------------------------------------------------
+-- Time: sql2unix --------------------------------------------------------------
+
+0: SQL Datetime, string output.
+
+*/
+
+&f.time.sql2unix [v( d.ums )]=sql( SELECT UNIX_TIMESTAMP( '%0' ))
+
+/* -- test --
+
+think u( v( d.ums )/f.time.sql2unix, u( v( d.ums )/f.time.unix2sql, secs() ))
+
+think sql( SELECT UNIX_TIMESTAMP( '[u( v( d.ums )/f.time.unix2sql, secs() )]' ))
+think secs()
+
+/*
+--------------------------------------------------------------------------------
+-- set types and config --------------------------------------------------------
+
+Some of these are not used, but were added here as reminders for me. These are
+where you customize the color scheme, the look/feel, as well as the code.
+
+*/
+
+&d.message_types [v( d.ums )]=email txt wantrp staff system
+&d.target_types [v( d.ums )]=player faction
+&d.status_types [v( d.ums )]=unread read new completed deleted
+
+&d.txt.prefs [v( d.ums )]=lowlight highlight mlight connect hourly
+
+&d.txt.channel [v( d.ums )]=Txt Log
+
+// Sample Defaults
+
+&d.lowlight [v( d.ums )]=hr
+&d.highlight [v( d.ums )]=hw
+&d.mlight [v( d.ums )]=hw
+&d.txt.header.name [v( d.ums )]=Text Message
+&d.txt.footer.name [v( d.ums )]=+txt
+&d.txt.creepy [v( d.ums )]=
+
+/*
+
+My choices for The Devil's Garden:
+
+&d.lowlight [v( d.ums )]=<#f89ad8>
+&d.highlight [v( d.ums )]=<#a9d8ee>
+&d.mlight [v( d.ums )]=hw
+&d.txt.header.name [v( d.ums )]=Cheiron Group Simple Message Service v1.3
+&d.txt.footer.name [v( d.ums )]=CG SMS v1.3
+&d.txt.creepy [v( d.ums )]=Thank you for choosing Cheiron Group.
+
+
+================================================================================
+== +txt et al ==================================================================
+
+TXT: This should be the most simple. Send a text! IF the target is online, they 
+get a message immediately, if not, it will be stored as unread.
+
+Sample:
+
++txt <name>=<message>
+
+<name> is player name OR space separated list of player names. 
+IF BLANK then grab "last texted".
+
+-------------------------------------------------------------------------------
+-- mistress command -----------------------------------------------------------
+
+So you type +txt ... and this command fires. Anything that comes AFTER +txt 
+will get processed appropriately.
+
++txt: Pulls short list of recent sent/received.
++txt #: brings up full info on txt number # (useful if the message is long)
++txt/all: Pulls long list of recent sent/received.
++txt/all #: Pulls up a list of # most recent sent/received. Might be buggy.
++txt <name>=<message>: Compose a new text!
++txt =<message>: Texts <message> to the last person you texted
++txt/new or +receive or +newtxt: Reads the oldest unread text
++txt/search <word>: Searches all your sent/received for <word>
++txt/name <name>: Searches all for <name> in the to or from.
+
+The code does some processing (objeval will get rid of weird codey stuff) and
+secure the message, then the various first/rest are set up to grab the text
+that comes after `+txt`. Generally, it's "qualifier","function" ... if it
+matches the first bit (as 1), it calls the functions.
+
+*/
+
+&c.txt [v( d.ums )]=$^\+?txt([\\s\\S]+)?$:think 
+	strcat(
+		setq( u, trim( u( f.secure.message, objeval( %#,  s( %1 ) ) ) ) ),
+		if( eq( strtrunc( %qu, 1 ), / ),
+			setq( e, secure( rest( %qu, / ) ) ),
+			setq( e, secure( %qu ) ) ),
+		if( t( rest( %qu, = ) ), strcat(
+			setq( m, rest( %qu, = ) ),
+			setq( p, secure( first( %qu, = ) ) ) ) ),
+		switch( 1,
+			eq( strlen(%1), 0 ), u( f.txt.sql, short, 31 ),
+			isnum( %qu ), u( f.txt.sql, trim( %qu ) ),
+			strmatch( first( %qe ), all ), u( f.txt.sql, first( %qe ), rest( %qe ) ),
+			strmatch( %qu, new ), u( f.txt.new ),
+			strmatch( first( %qe ), new ), u( f.txt.new ),
+			strmatch( first( %qe ), pref ), u( f.txt.pref, rest( %qe ) ),
+			strmatch( first( %qe ), name ), if(
+				u( .isapproved, pmatch( rest( %qe ) ) ), 
+				u( f.txt.sql.name, first( %qe ), rest( %qe ) ),
+				u( disp.txt.error, name, rest( %qe ) ) ),
+			strmatch( first( %qe ), search ), if( strmatch( last( %qe ), search ),
+				u( disp.txt.error, search ),
+				u( f.txt.sql.search, first( %qe ), rest( %qe ) ) ),
+			cand( t( %qm ), t( %qp ) ), u( f.txt.send, %qp, %qm ),
+			cand( t( %qm ), not( t( %qp ) ) ), u( f.txt.send, 1, %qm ),
+			u( f.txt.sql, short, 31 ) ) )
+
+@set [v( d.ums )]/c.txt=regex
+
+/*
+--------------------------------------------------------------------------------
+  Error Reporting!
+  
+This gets called when errors happen. This will get called throughout and will
+have an error type (ex: name, search) then a message. Can also include variables
+--------------------------------------------------------------------------------
+*/
+
+&disp.txt.error [v( d.ums )]=pemit( %#, u( .msg, TXT,
+	[switch( %0,
+		name, %1 is not an approved player.,
+		search, What'd ya do here?,
+		target, All targets must be valid and approved. You sent to "[%1]".,
+		pref, Please choose a valid preference. Valid choices are: [v( d.txt.prefs )].,
+		number, I thought you were going to give me a number...,
+		ERROR ERROR ERROR ) ] ) )
+
+/*
+--------------------------------------------------------------------------------
+Setting prefs!
+
+All prefs are pref.something. Check &d.txt.prefs above.
+
+--------------------------------------------------------------------------------
+*/
+
+&f.txt.pref [v( d.ums )]=strcat(
+	setq( 1, first( %0, = ) ),
+	setq( 2, rest( %0, = ) ),
+	if( cand( t( %0 ), strmatch( [v( d.txt.prefs )], *%q1* ) ),
+		strcat(
+			set( %#, pref.txt.[%q1]:[%q2] ),
+			pemit( %#, u( .msg, TXT, You have set "%q1" to "%q2". ) ) ),
+		u( disp.txt.error, pref, %q1, %q2 )
+	)
+	)
+
+/*
+--------------------------------------------------------------------------------
++txt send
+--------------------------------------------------------------------------------
+This commands needs to display the text for sending + receiver.
+
+Text is displayed for sender and receiver(s) then added to the DB. Each player
+gets a copy of the message in the DB, so if someone deletes, it won't affect
+the others. So it goes...
+
+* If there's no target, check d.txt.target. That's your 'last target'.
+* process "to" list with pmatch().
+* check that all people in %qp (receivers) are approved.
+* process sender + receiver list.
+  * Check if receiver is connected using .connected
+  * Run sql. One insert per person.
+  * pemit to everyone (sender + receivers)
+* Display on txt mon channel (leave the config setting blank if you don't want)
+* Set the senders d.txt.target (last sent) to the receiver list.
+
+Note: isapproved() is different on different games. As such, I use:
+	u( .isapproved, pmatch( ## ) ). The function calls isapproved(), but you
+	can change it more easily up top, under &.isapproved.
+
+*/
+
+&f.txt.send [v( d.ums )]=strcat(
+	if( eq( %0, 1 ), setq( p, get( %#/d.txt.target ) ), setq( p, setunion( %0, %0 ) ) ),
+	setq( m, [stripansi( %1 )] ),
+	setq( p, iter( %qp, pmatch( ## ) ) ),
+	iter( %qp, if( u( .isapproved, pmatch( ## ) ), , setq( e, 1 ) ) ),
+	if( eq( %qe, 1 ), u( disp.txt.error, target, %0 ),
+		strcat( iter( %qp %#, strcat(
+				setq( c, u( .connected, ## ) ),
+				sql( u( sql.txt.newtxt, ##, %qp, %qm, %#, %qc ) ),
+				pemit( ##, u( disp.txt.msgrec, ##, %qp, %qm, %# ) )
+				) ),
+			u( disp.txt.msgchanemit, %qp, %qm, %# ),
+			set( %#, d.txt.target:%qp ) ) ) )
+
+/*
+-------------------------------------------------------------------------------
+DISPLAY MESSAGE
+-------------------------------------------------------------------------------
+Note: It's msgrec cause it was "message receive" but I decided to not do
+send/receive as different but left it cause it still makes sense. Sorta.
+
+input: u( disp.txt.msgrec, %qn, %qp, %qm, %# )
+
+0: Target of this message
+1: To
+2: Message
+3: From
+
+Sample message:
+
+<TXT> From Sender to Receiver: Message
+
+<TXT> From %3 to %1: %2
+
+Colors:
+1: Highlight (Names)
+2: Lowlight (Everything else but...)
+3: Message Color
+
+*/
+
+&disp.txt.msgrec [v( d.ums )]=strcat(
+	setq( l, u( .lowlight, %0 ) ),
+	setq( h, u( .highlight, %0 ) ),
+	setq( t, u( .mlight, %0 ) ),
+	ansi( %ql, <TXT> From,
+		%qh, %b[name(%3)],
+		%ql, %bto),
+	 %b[itemize( 
+		iter( %1, 
+			ansi( [ if( hasflag( ##, connected ), %qh, n )], 
+				strcat( [ if( hasflag( ##, connected ), ,* )],
+					name( ## ) )
+				), ,%b ) 
+			)] ,
+	ansi( %ql, :, %qt, %b%2 ) )
+
+/*
+-------------------------------------------------------------------------------
+STORE IN SQL
+-------------------------------------------------------------------------------
+Each txt is going to get stored in sql.
+
+Input: u( sql.txt.newtxt, ##, %qp, %qm, %#, %qc )
+
+u( sql.txt.newtxt, #74, #103, I choose you!, %#, read )
+
+0: To Write To This Person (dbref)
+1: Receiver List (one or more dbrefs)
+2: Message (message)
+3: Sender (dbref) - copied to spoof_sender too
+4: Status (read/unread if connected)
+
+*/
+
+&sql.txt.newtxt [v( d.ums )]=
+	INSERT 
+		INTO message_log ( 
+			owner_objid, owner_name, 
+			message_num, 
+			sender, spoof_sender, receiver, spoof_receiver, target_type, 
+			message_type, status, 
+			subject, message 
+		) 
+		SELECT 
+			'[u( .objid, %0 )]', '[u( f.sql.escape, name( %0 ))]', 
+			ifnull( max( message_num ), 0 )+1 as message_num, 
+			'%3', '%3', '%1', '%1', 'player', 
+			'txt', '%4', 
+			'TXT', '[ u( f.sql.escape, %2 )]' 
+		FROM 
+			message_log 
+		where 
+			owner_objid='[u( .objid,  %0 )]' 
+
+/*
+-------------------------------------------------------------------------------
+Display on channel...
+-------------------------------------------------------------------------------
+input: u( disp.txt.msgchanemit, %qp, %qm, %# )
+
+0: Receivers/To List
+1: Message
+2: Sender
+
+The purpose of this quite simply to display the txt on the monitoring channel
+Staff will be watching this idly. More for  curiosity sake than anything.
+
+** If you don't want your staff to watch txts, leave d.txt.channel blank! **
+
+Output is like this: [Txt Log] From skew to pikachu: I choose you, Pikachu!
+No colors, only white/highlight.
+
+*/
+
+&disp.txt.msgchanemit [v( d.ums )]=cemit( [v( d.txt.channel )],
+		ansi( n, From, h, %b [name(%2)],
+			n, %bto, 
+			h, %b [itemize( iter( %0, name( ## ) ) )],
+			n, :, hw, %b%1 ) )
+
+/*
+-------------------------------------------------------------------------------
++txt/new or +receive or +newtxt
+
+Reads the oldest unread text on your list.
+
+Input: u( f.txt.new ) - No inputs. Code does a SQL query to find the oldest
+unread message, then passes that number to f.txt.sql.
+
+-------------------------------------------------------------------------------
+*/
+
+&f.txt.new [v( d.ums )]=if(
+		strlen( setr( 9, sql( u( sql.txt.unread ) ) ) ),
+		u( f.txt.sql, first( %q9 ) ),
+		pemit( %#, u( .msg, TXT, No unread messages. ) ) )
+
+/*
+================================================================================
+SQL stuff
+================================================================================
+
+Everything goes into SQL. 
+
+Since everything is there, it's not just your last 30 messages, but EVERYTHING.
+So, to make the list easier to read, rather than displaying 0-273 (if you had
+273 texts), it displays 0-30, always.
+
+How I do that is before. This is just the functions.
+
++txt: Pulls short list of recent sent/received.
++txt #: brings up full info on txt number # (useful if the message is long)
++txt/all: Pulls long list of recent sent/received.
++txt/all #: Pulls up a list of # most recent sent/received. Might be buggy.
+
++txt/new or +receive or +newtxt: Reads the oldest unread text
+
++txt/search <word>: Searches all your sent/received for <word>
++txt/name <name>: Searches all for <name> in the to or from.
+
+f.txt.sql.all, first( %qe ), rest( %qe )
+f.txt.sql.name, first( %qe ), rest( %qe )
+f.txt.sql.search, first( %qe ), rest( %qe )
+
+--------------------------------------------------------------------------------
+f.txt.sql
+--------------------------------------------------------------------------------
+
+SQL will output... (feeds into elements, so not starting at 0)
+
+1: message_num
+2: date_sent
+3: sender
+4: spoof_sender
+5: spoof_receiver
+6: status
+
+
+column delim: |
+row delim: ~
+
+--------------------------------------------------------------------------------
+
+Functions: These are what the c.txt command calls. Mostly they just process the
+call, joining together the SQL with the display attribute.
+
+*/
+
+&f.txt.sql [v( d.ums )]=switch( 1,
+	isnum( %0 ),
+	u( disp.txt.sql.get, sql( u( sql.txt.get, %0 ), ~, | ) ),
+	isnum( %1 ),
+	u( disp.txt.sql, escape( sql( u( sql.txt.all, %1 ), ~, | ) ) ),
+	u( disp.txt.sql, escape( sql( u( sql.txt.all, 100 ), ~, | ) ) ) )
+
+&f.txt.sql.name [v( d.ums )]=u( disp.txt.sql,
+	escape( sql( u( sql.txt.name, pmatch( %1 ) ), ~, | ) ) )
+
+&f.txt.sql.search [v( d.ums )]=u( disp.txt.sql,
+	escape( sql( u( sql.txt.search, %1 ), ~, | ) ) )
+
+/*
+-------------------------------------------------------------------------------
+
+disp.txt.sql takes a bunch of txts and outputs them on a list from 0 to X.
+disp.txt.sql.get takes a single message and displays the whole thing.
+
+ message_num, date_sent, sender, spoof_sender, receiver, spoof_receiver, message, status
+
+A note on spoof: ATM, it's not used. spoof will always match whatever it is. But
+soon there will be a staff-side +stxt spoof command.
+
+This is using elementsmux() not variables, so...
+1: message_num
+2: date_sent
+3: sender
+4: spoof_sender
+5: spoof_receiver
+6: status
+
+-------------------------------------------------------------------------------
+*/
+
+&disp.txt.sql [v( d.ums )]=pemit( %#,
+		if( t( %0 ),
+		strcat(
+			setq( l, u( .lowlight, %# ) ),
+			setq( h, u( .highlight, %# ) ),
+			setq( t, u( .mlight, %# ) ),
+			wheader( [v( d.txt.header.name )] ), %r,
+			ljust( *, 1 ),
+			ljust( ansi( %ql, # ), 5 ),
+			ljust( ansi( %ql, Date ), 12 ),
+			ljust( ansi( %ql, From ), 12 ),
+			ljust( ansi( %ql, To ), 17 ),
+			ljust( ansi( %ql, Message ), sub( width( %# ), 47 ) ), %r,
+			wdivider(), %r,
+			iter( revwords( %0 , ~ ),
+				strcat(
+					ljust( if( strmatch( elementsmux( [lit( ## )], 7, | ), unread ),
+						ansi( hr, * ) ), 1 ),
+					ljust( ansi( h, elementsmux( ##, 1, | ) ), 5 ),
+					ljust( ansi( h, ptimefmt( $m/$d $H:$M,
+						u( f.time.sql2unix, elementsmux( ##, 2, | ) ) ) ), 12 ),
+					ljust( ansi( %qh, name( elementsmux( ##, 4, | ) ) ), 11, ), %b,
+					ljust( ansi( %qh, itemize( iter( elementsmux( [secure( ## )], 5, | ),
+					 	name( [itext(0)] ) ) ) ), 16, ), %b,
+					ljust( ansi( %qt, elementsmux( ##, 6, | ) ), sub( width( %# ), 48 ) ) ), ~, %r ), %r,
+			wfooter( [v( d.txt.footer.name )] ) ),
+			u( .msg, TXT, Search returns no results. ) ) )
+
+/*
+Display a single message...
+
+This is using elementsmux() not variables, so...
+1: message_num
+2: date_sent
+3: sender
+4: spoof_sender
+5: spoof_receiver
+6: status
+*/
+
+&disp.txt.sql.get [v( d.ums )]=pemit( %#,
+	if( t( %0 ),
+	strcat(
+		setq( l, u( .lowlight, %# ) ),
+		setq( h, u( .highlight, %# ) ),
+		setq( t, u( .mlight, %# ) ),
+		setq( s, %0 ),
+			strcat(
+				if( strmatch( elementsmux( %qs, 7, | ), unread ),
+					sql( u( sql.txt.updatestatus, elementsmux( %qs, 1, | ), read ) ) ),
+				wheader( [v( d.txt.header.name )] ), %r,
+				ljust( ansi( %ql, # ), 2 ),
+				ljust( ansi( %qh, elementsmux( %qs, 1, | ) ), 5 ),
+				ljust( ansi( %ql, Date: ), 6 ),
+				ljust( ansi( %qh, ptimefmt( $m/$d $H:$M,
+								u( f.time.sql2unix, elementsmux( %qs, 2, | ) ) ) ), 12 ),
+				ljust( ansi( %ql, From: ), 6 ),
+				ljust( ansi( %qh, name( elementsmux( %qs, 4, | ) ) ), 10 ),
+				ljust( ansi( %ql, To: ), 4 ),
+				ljust( ansi( %qh, itemize( iter( elementsmux( %qs, 5, | ),
+				 	name( pmatch( ## ) ) ) ) ), 15 ), %r,
+				wdivider(), %r,
+				ansi( %qt, elementsmux( %qs, 6, | ) ), %r,
+				if( cand( t( [v( d.txt.creepy )] ), eq( rand(20), 1 ) ),
+					%r [center( ansi( hx, [v( d.txt.creepy )]), width(%#) )] %r, ),
+				wfooter( [v( d.txt.footer.name )] ) ) ),
+			u( .msg, TXT, No message found by that number. ) ) )
+
+/*
+--------------------------------------------------------------------------------
+
+And now comes the SQL.
+
+.objid code takes your dbref + the date your bit was created in order to 
+create a more certain identifier. That way if a dbref is ever reused it won't 
+pull the other data.
+
+--------------------------------------------------------------------------------
+*/
+
+// message_num, date_sent, sender, spoof_sender, spoof_receiver, message, status
+
+&sql.txt.all [v( d.ums )]=
+	SELECT 
+		(SELECT max(message_num) FROM message_log 
+			WHERE owner_objid='[u( .objid,  %# )]' AND message_type='txt' ) - message_num as m, 
+	date_sent, sender, spoof_sender, spoof_receiver, message, status 
+	FROM message_log 
+	WHERE owner_objid='[u( .objid,  %# )]' AND message_type='txt' 
+	ORDER BY m ASC [if( t( %0 ), LIMIT %0 )] 
+
+// message_num, date_sent, sender, spoof_sender, spoof_receiver, message, status	
+	
+&sql.txt.get [v( d.ums )]=
+	SELECT 
+		(SELECT max(message_num) FROM message_log 
+			WHERE owner_objid='[u( .objid,  %# )]' AND message_type='txt' ) - message_num as m, 
+	date_sent, sender, spoof_sender, spoof_receiver, message, status 
+	FROM message_log 
+	WHERE owner_objid='[u( .objid,  %# )]' AND message_type='txt' 
+	AND message_num=(SELECT max(message_num) FROM message_log 
+			WHERE owner_objid='[u( .objid,  %# )]' AND message_type='txt' ) - %0 
+
+&sql.txt.name [v( d.ums )]=
+	SELECT 
+		(SELECT max(message_num) FROM message_log 
+			WHERE owner_objid='[u( .objid,  %# )]' AND message_type='txt' ) - message_num as m, 
+	date_sent, sender, spoof_sender, spoof_receiver, message, status 
+	FROM message_log 
+	WHERE owner_objid='[u( .objid,  %# )]' AND message_type='txt' 
+	AND ( sender LIKE '[strcat( %%, %0, %% )]' 
+		OR receiver LIKE '[strcat( %%, %0, %% )]' ) 
+	ORDER BY message_num DESC LIMIT 200 
+
+&sql.txt.search [v( d.ums )]=
+	SELECT 
+		(SELECT max(message_num) FROM message_log 
+			WHERE owner_objid='[u( .objid,  %# )]' AND message_type='txt' ) - message_num as m, 
+	date_sent, sender, spoof_sender, spoof_receiver, message, status 
+	FROM message_log 
+	WHERE owner_objid='[u( .objid,  %# )]' AND message_type='txt' 
+	AND message LIKE '[strcat( %%, %0, %% )]' 
+	ORDER BY message_num DESC LIMIT 200 
+
+&sql.txt.unread [v( d.ums )]=
+	SELECT 
+		(SELECT max(message_num) FROM message_log 
+			WHERE owner_objid='[u( .objid,  %# )]' AND message_type='txt' ) - message_num as m 
+	FROM message_log 
+	WHERE owner_objid='[u( .objid,  %# )]' AND message_type='txt' AND status='unread' 
+
+&sql.txt.updatestatus [v( d.ums )]=
+	UPDATE message_log 
+		SET status='%1' 
+		WHERE message_num= 
+			(SELECT m-%0 
+				FROM (SELECT max(message_num) as m 
+					FROM message_log 
+					WHERE owner_objid='[u( .objid,  %# )]' 
+					AND message_type='txt' ) as m ) 
+
+/*
+===============================================================================
+
+Reminders and alerts!
+
+1: Every hour, if you have unread texts, it gives you a "you have unread msgs".
+2: On login, it tells you, "you have unread msgs".
+
+These can be copied as more things are added (like e-mail). For now, just txt.
+
+-------------------------------------------------------------------------------
+
+Hourly reminder.
+
+If you do not have an "hourly" alert already set up on your CRON, you can use
+this one here:
+
+&CRON_TIME_HOURLY [v( d.cron )]=||||13|
+@fo me=&JOBS_HOURLY [v( d.cron )]=[v( d.ums )]/trig.txt.hourly
+&CRON_JOB_HOURLY [v( d.cron )]=@dol [v( jobs_hourly )]=@trigger ##
+
+*/
+
+&trig.txt.hourly [v( d.ums )]=think
+	iter( [sql( u( sql.txt.hourly ), ~, | )],
+		if( not( strmatch( get(##/pref.txt.hourly), off ) ),
+			pemit( first( ##, + ),
+				u( .msg, TXT, You have [u( .plural, [rest( ##, | )], unread txt message, unread txt messages)]! ) ) ), ~ )
+
+&sql.txt.hourly [v( d.ums )]=
+	SELECT 
+		owner_objid, count(message_num) 
+	FROM 
+		message_log 
+	where 
+		status='unread' 
+	GROUP BY owner_objid
+
+	// on connect
+
+@aconnect [v( d.ums )]=@if cand( not( strmatch( get(%#/pref.txt.connect), off ) ),
+		t( setr( 9, [sql( u( sql.txt.connect ), ~, | )] ) ) )=
+		{@pemit %#=u( .msg, TXT, You have [u( .plural, [rest( %q9, | )], unread txt message, unread txt messages)]! )}
+
+&sql.txt.connect [v( d.ums )]=
+	SELECT 
+		owner_objid, count(message_num) 
+	FROM 
+		message_log 
+	where 
+		status='unread' and owner_objid='[u( .objid,  %# )]' 
+	GROUP BY owner_objid 
+
+/*
+
+================================================================================
+=== Txt Commands Help File =====================================================
+
+The +txt system allows you to send and receive in-character txt messages!
+You will be informed of new messages as they are sent and received, and also
+alerted on login if you have messages waiting.
+
+Commands:
++txt: Pulls short list of recent sent/received.
+
++txt #: brings up full info on txt number # (useful if the message is long)
+
++txt/all: Pulls long list of recent sent/received.
++txt/all #: Pulls up a list of # most recent sent/received.
+
++txt <name>=<message>: Compose a new text!
++txt =<message>: Texts <message> to the last person you texted
+
++txt/new or +receive or +newtxt: Reads the oldest unread text
+
++txt/search <word>: Searches all your sent/received for <word>
++txt/name <name>: Searches all for <name> in the to or from.
+
++txt/pref <pref>=<response>: Changes a setting. Valid options:
+	* lowlight : Color choice in ansi. Ex: Either `hg` or `<#fffffff>`
+	* highlight : Color choice in ansi. Ex: Either `hg` or `<#fffffff>`
+	* mlight : Color choice in ansi. Ex: Either `hg` or `<#fffffff>`
+	* connect : Message on connect. Either on/off.
+	* hourly : Hourly reminder. Either on/off.
+
+================================================================================
+
+-------------------------------------------------------------------------------
+STAFF COMMANDS!
+
+Misnomer. These are actually locked to Wizards atm. See...
+@assert not( hasflag( %#, wizard) )=
+
+Replace the hasflag wizard w/ isstaff and bob's your uncle.
+
++stxt -- Because it's like +sext and that's hilarious to me.
+
++stxt: na
++stxt #: pull up individual text.
++stxt/last <name>: Small list for <name>
++stxt/all <name>: Big list for <name>
++stxt/spoof <spoofname>/<name>=<message>: NOT WORKING.
++stxt/search <word>: Searches ALL texts for <word>.
++stxt/name <name>=<name>: Searches all for <name> in the to or from.
+
+-------------------------------------------------------------------------------
+Mistress command.
+-------------------------------------------------------------------------------
+*/
+
+&c.stxt [v( d.ums )]=$^\+?stxt([\\s\\S]+)?$:@assert not( hasflag( %#, wizard) )={
+	think 
+		strcat( 
+			setq( u, trim( u( f.secure.message, objeval( %#,  s( %1 ) ) ) ) ),
+			setq( f, first( %qu ) ),
+			setq( r, rest( %qu ) ),
+			switch( %qf,
+				/last, u( f.stxt.all, last, %qr ),
+				/all, u( f.stxt.all, all, %qr ),
+				/spoof, u( f.stxt.sendspoof, %qr ),
+				/search, u( f.stxt.search, %qr ),
+				/name, u( f.stxt.name, %qr ),
+				u( f.stxt.get, %qf )
+			),
+			cemit( [v( d.txt.channel )], [name( %# )] is stxting! Input: [secure( %0 )] )
+		) 
+	}
+
+@set [v( d.ums )]/c.stxt=regex
+
+/*
+-------------------------------------------------------------------------------
+Process...
+-------------------------------------------------------------------------------
+*/
+
+&f.stxt.all [v( d.ums )]=if( pmatch( %1 ),
+	switch( %0,
+		last, u( disp.stxt.sql, escape( sql( u( sql.stxt.all, pmatch( %1 ), 30 ), ~, | ) ) ),
+		u( disp.stxt.sql, escape( sql( u( sql.stxt.all, pmatch( %1 ), 200 ), ~, | ) ) ) ),
+	u( disp.txt.error, target, %1 ) )
+
+&f.stxt.get [v( d.ums )]=if( isnum( %0 ),
+	u( disp.stxt.sql.get, sql( u( sql.stxt.get, %0 ), ~, | ) ),
+	u( disp.txt.error, number, %0 ) )
+
+&f.stxt.name [v( d.ums )]=u( disp.stxt.sql,
+		escape( sql( u( sql.stxt.name, 
+			pmatch( first( %0, = ) ), pmatch( rest( %0, = ) ) ), ~, | ) ) )
+	
+&f.stxt.search [v( d.ums )]=u( disp.stxt.sql,
+		escape( sql( u( sql.stxt.search, %0 ), ~, | ) ) )
+		
+&f.stxt.sendspoof [v( d.ums )]=pemit( %#,
+	u( .msg, TXT, Not set up yet! ))
+
+/*
+-------------------------------------------------------------------------------
+Display stuff! Same as above but we won't fix the #, just raw.
+-------------------------------------------------------------------------------
+*/
+
+// entry_num, date_sent, sender, spoof_sender, receiver, spoof_receiver, message, status
+
+&sql.stxt.all [v( d.ums )]=
+	SELECT entry_num, 
+	date_sent, sender, spoof_sender, receiver, spoof_receiver, message, status 
+	FROM message_log 
+	WHERE owner_objid='[u( .objid,  %0 )]' AND message_type='txt' 
+	ORDER BY entry_num ASC LIMIT %1
+	
+&sql.stxt.get [v( d.ums )]=
+	SELECT entry_num, 
+	date_sent, sender, spoof_sender, receiver, spoof_receiver, message, status 
+	FROM message_log 
+	WHERE message_type='txt' 
+	AND entry_num=%0 
+		
+&sql.stxt.name [v( d.ums )]=
+	SELECT entry_num, 
+	date_sent, sender, spoof_sender, receiver, spoof_receiver, message, status 
+	FROM message_log 
+	WHERE message_type='txt' 
+	AND ( sender LIKE '[strcat( %%, %0, %% )]' 
+		OR receiver LIKE '[strcat( %%, %0, %% )]' ) 
+	AND ( sender LIKE '[strcat( %%, %1, %% )]' 
+		OR receiver LIKE '[strcat( %%, %1, %% )]' ) 
+	ORDER BY message_num LIMIT 200 
+
+&sql.stxt.search [v( d.ums )]=
+	SELECT entry_num, 
+	date_sent, sender, spoof_sender, receiver, spoof_receiver, message, status 
+	FROM message_log 
+	WHERE message_type='txt' 
+	AND message LIKE '[strcat( %%, %0, %% )]' 
+	ORDER BY message_num LIMIT 200 
+
+/*
+-------------------------------------------------------------------------------
+Display stuff! Same as above but we won't fix the #, just raw.
+
+1: Entry num
+2: Date_sent
+3: sender
+4: spoof_sender
+5: receiver
+6: spoof_receiver
+7: message
+8: status
+
+-------------------------------------------------------------------------------
+*/
+
+&disp.stxt.sql [v( d.ums )]=pemit( %#,
+		if( t( %0 ),
+		strcat(
+			setq( l, u( .lowlight, %# ) ),
+			setq( h, u( .highlight, %# ) ),
+			setq( t, u( .mlight, %# ) ),
+			wheader( [v( d.txt.header.name )] ), %r,
+			ljust( *, 1 ),
+			ljust( ansi( %ql, # ), 6 ),
+			ljust( ansi( %ql, Date ), 12 ),
+			ljust( ansi( %ql, From ), 13 ),
+			ljust( ansi( %ql, To ), 18 ),
+			ljust( ansi( %ql, Message ), sub( width( %# ), 51 ) ), %r,
+			wdivider(), %r,
+			iter( %0,
+				strcat(
+					ljust( if( strmatch( elementsmux( [lit( ## )], 8, | ), unread ),
+						ansi( hr, * ) ), 1 ),
+					ljust( ansi( h, elementsmux( ##, 1, | ) ), 6 ),
+					ljust( ansi( h, ptimefmt( $m/$d $H:$M,
+						u( f.time.sql2unix, elementsmux( ##, 2, | ) ) ) ), 12 ),
+					ljust( ansi( %qh, name( elementsmux( ##, 4, | ) ) ), 11, ),
+					ljust( if( strmatch( elementsmux( [lit( ## )], 4, | ), 
+						elementsmux( [lit( ## )], 3, | ) ), ,
+						ansi( hr, * ) ), 1 ), %b,
+					ljust( ansi( %qh, itemize( iter( elementsmux( ##, 5, | ),
+					 	name( [itext(0)] ) ) ) ), 16, ), 
+					ljust( if( strmatch( elementsmux( [lit( ## )], 5, | ), 
+						elementsmux( [lit( ## )], 6, | ) ), ,
+						ansi( hr, * ) ), 1 ), %b,
+					ljust( ansi( %qt, 
+						elementsmux( ##, 7, | ) ), sub( width( %# ), 51 ) ) ),
+					 ~, %r ), %r,
+			wfooter( [v( d.txt.footer.name )] ) ),
+			u( .msg, TXT, Search returns no results. ) ) )
+
+/*
+--------------------------------------------------------------------------------
+Display a single message...
+--------------------------------------------------------------------------------
+
+This is using elementsmux() not variables, so starts at 1
+1: Entry num
+2: Date_sent
+3: sender
+4: spoof_sender
+5: receiver
+6: spoof_receiver
+7: message
+8: status
+
+--------------------------------------------------------------------------------
+*/
+
+&disp.stxt.sql.get [v( d.ums )]=pemit( %#,
+	if( t( %0 ),
+	strcat(
+		setq( l, u( .lowlight, %# ) ),
+		setq( h, u( .highlight, %# ) ),
+		setq( t, u( .mlight, %# ) ),
+		setq( s, %0 ),
+			strcat(
+				wheader( [v( d.txt.header.name )] ), %r,
+				ljust( ansi( %ql, # ), 2 ),
+				ljust( ansi( %qh, elementsmux( %qs, 1, | ) ), 6 ),
+				ljust( ansi( %ql, Date: ), 6 ),
+				ljust( ansi( %qh,timefmt( $m/$d $H:$M,
+								u( f.time.sql2unix, elementsmux( %qs, 2, | ) ) ) ), 12 ),
+				ljust( ansi( %ql, From: ), 6 ),
+				ljust( ansi( %qh, strcat( 
+					name( elementsmux( %qs, 3, | ) ), /,
+					name( elementsmux( %qs, 4, | ) ) ) ), 20),
+				ljust( ansi( %ql, To: ), 4 ),
+				ljust( ansi( %qh, itemize( iter( elementsmux( %qs, 5, | ),
+				 	name( pmatch( ## ) ) ) ) ), 15 ), /,
+				ljust( ansi( %qh, itemize( iter( elementsmux( %qs, 6, | ),
+				 	name( pmatch( ## ) ) ) ) ), 15 ), %r,
+				wdivider(), %r,
+				ansi( %qt, elementsmux( %qs, 7, | ) ), %r,
+				wfooter( [v( d.txt.footer.name )] ) ) ),
+			u( .msg, TXT, No message found by that number. ) ) )
+
+
+/*
+================================================================================
+=== Staff Txt Commands Help File ===============================================
+
+For staff's monitoring and searching of the +txt system!
+
+Commands:
+
++stxt: Returns a sassy and useless response.
+
++stxt #: pull up individual text with the number from below.
+
++stxt/last <name>: Small list for <name>
++stxt/all <name>: Big list for <name>
+
++stxt/spoof <spoofname>/<name>=<message>: Not working at present.
+
++stxt/search <word>: Searches ALL texts for <word>.
++stxt/name <name>=<name>: Searches all for <name> in the to or from.
+
+*/
+/*
+Coming soon...
+--------------------------------------------------------------------------------
+-- Email Messaging -------------------------------
+
+Email: This will work the exact same as text except it will NOT pemit and ALWAYS go to "waiting to be read". Logic here is that they're probably big and spammy and you don't want them just SPRAYING in your face.
+
+Special: I need a subject, right? Yeah prob :(
+
+Do I need to allow people to write + preview...? Nic likes it sooOoOoOo
+
+Sample:
+
++email <name>/<subject>=<message>
+
+Alternate:
+
++email/message <message>
++email/to <name>
++email/subject <subject>
++email/review
++email/send
+*/
