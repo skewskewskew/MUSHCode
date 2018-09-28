@@ -19,21 +19,12 @@ The basic functionality goes:
   (poseorder/here off). The latter allows players to configure rooms they own.
 	* Players can always use +poseorder to check the current poseorder.
 	
-Some thoughts:
+Wish List:
 
-	* At present, there is no way to look at Zone, room parent, mass attribute, etc. So if you set a room "OOC" in some manner, 
-  there's no means to set that. It would not be hard at all to do, though. The first thing it does is check vs the list of 
-  excluded rooms.
-	* If you are the first person to pose in a room/scene, after the second person poses, you'll get pinged. If it's a multi-player 
-  scene, you'll get pinged again, and again, and again, until it's back to your turn. It's obnoxious but I couldn't think of 
-  any way to accommodate that.
-	* Pose order sets loud, quiet, and off. Quiet = pemit to player. Loud = beep(). Not every client processes beep().
-	* I have put in +poseorder/clear. This will emit to the room to let the room know who cleared it, but I think it's pretty 
-  important to be able to clear. Say, someone says "idle for 30 minutes", the poseorder machine will not clear them until 45 
-  minutes pass. This lets you do it manually.
-	* So, why 45 minutes? I presented this to numerous players. If you're in a scene with 3 players, and each players takes 15
-  minutes to pose (or longer), you'd be wiped off the list each round, if it were 30 minutes or 15 minutes. This can be 
-  adjusted easily, though.
+* Find a way to not ping the first poser in a big scene.
+	(Maybe: If more than 5 people, wait for 3 poses to accrue?)
+* poseorder/fixed X -- Alert you every x poses, regardless of whose turn.
+* poseorder/ondeck -- Alert you when your turn is up next.
 
 PLEASE NOTE: This is designed to be dropped into Muxify ( http://muxify.musoapbox.net/editor.html ).
 Muxify will not work on Chrome or Edge (for me, at least), so please use FireFox.
@@ -78,6 +69,8 @@ you can keep tinkering even if the object isn't in the room with you.
 &d.pose.time [v( d.pom )]=2700
 
 &d.exclude.rooms [v( d.pom )]=@@( Adding this here so you know it's here. Code will set it when needed. )
+
+&d.exclude.zones [v( d.pom )]=@@( Adding this here so you know it's here. Code will set it when needed. )
 
 @@ Configure the hook object to send to the pom object.
 
@@ -126,28 +119,50 @@ you can keep tinkering even if the object isn't in the room with you.
 
 &f.poseorder [v( d.pom )]=
 	strcat(
-		setq( l, loc( %# ) ), @@( get location ),
-			if( cor( 
-					match( u( d.exclude.rooms ), %ql ), @@( check exclude room list),
-					match( get( %ql/_POSE.ORDER ), off ), @@( check setting on local room )
-				), @@( If on the no list do nothing ),
-				strcat(
-					wipe( %ql/d.pose.*.%0 ), @@( clear your previous poses ),
-					set( %ql, 
-						u( f.format.pose.attribute, %0 ):
-						[u( f.format.pose.data, %0 )] ), @@( add that you posed ),
-					trigger( %!/trig.pose.alert, %ql), @@( alert next up )
-				) 
+		setq( l, loc( %0 ) ), @@( get location ),
+		if( cor( 
+				match( u( d.exclude.zones ), zone( %ql ) ), @@( check exclude zones),
+				match( u( d.exclude.rooms ), %ql ), @@( check exclude room list),
+				match( get( %ql/_POSE.ORDER ), off ), @@( check setting on local room )
+			), @@( If on the no list do nothing ),
+			strcat( 
+				iter( 
+					lattr( %ql/d.pose.* ), 
+					if( 
+						match( last( get( %ql/## ), . ), %0 ), 
+						wipe( %ql/## ) , 
+//						pemit( %#, %xhxr I think I should be wiping %ql/## ),
+						@@( do nothing )
+					) 
+				), @@( clear your previous poses ),
+				set( %ql, 
+					u( f.format.pose.attribute, %0 ):
+					[u( f.format.pose.data, %0 )] ), @@( add that you posed ),
+				trigger( me/trig.pose.alert, %ql ), @@( alert next up )
 			)
+		)
 	)
-		
+
 
 @@ Each time you pose add attrib. Should looks like:
-@@ d.pose.12098570983.#15:12098570983.#15
-@@ Repeating data because it's just easier for me to process.
+@@ d.pose.34 : 12098570983.#15
+@@ d.pose.next available number : time.who posed
 		
+@@ We're adding 1000 so the attribute will be 1001+, that makes it easier
+@@ To sort (because otherwise d.pose.1 d.pose.2 d.pose.10 ... it'll go 1 10 2		
 &f.format.pose.attribute [v( d.pom )]=
-	strcat( d., pose., secs()., %0 )
+	strcat( d., pose., inc( add( u( f.get.last ), 1000 ) ) )
+
+@@ Check all attributes for the #s, grab the last (highest)	
+&f.get.last [v( d.pom )]=
+	last( 
+		sort( 
+			iter( 
+				lattr( %ql/d.pose.* ), 
+				last( ##, . )
+			, , %b )
+		, n )
+	)
 	
 &f.format.pose.data 	[v( d.pom )]=
 	strcat( secs()., %0	)
@@ -159,53 +174,67 @@ you can keep tinkering even if the object isn't in the room with you.
 		setq( o, sort( lattr( %0/d.pose.* ) ) ),
 		iter( %qo, get( %0/## ) ),
 		@@( List of who posed is stored on room object )
-	)
-
+	)	
+	
 &trig.sweep.rooms [v( d.pom )]=
-	th strcat(
-		setq( r, search( eroom=lattr( ##/d.pose.* ))),
-		iter( %qr, trigger( %!/trig.sweep.idle, ## ) )
-	)
+	@dol search( eroom=lattr( ##/d.pose.* ))=
+		@trig me/trig.sweep.idle=##
 	
 @@ Sweep will be triggered via CRON on a one minute. If not in room, if disconnected, or if exceed time
 @@ You get swept!
 	
 &trig.sweep.idle [v( d.pom )]=
-	th strcat(
-		setq( r, %0 ),
-		setq( o, u( f.order.poses, %0 ) ),
-		iter( %qo, strcat(
-			setq( t, first( ##, . ) ),
-			setq( p, rest( ##, . ) ),
-			if( cor(
-					not( match( lcon( %qr, connect ), %qp ) ),
-					gte( sub( secs(), %qt ), u( d.pose.time ) )
+	@dol lattr( %0/d.pose.* )=
+		th strcat(
+			setq( 1, get( %0/## ) ),
+			setq( t, first( %q1, . ) ),
+			setq( p, rest( %q1, . ) ),
+			if( 
+				cor(
+					not( match( lcon( %0, connect ), %qp ) ),
+					gte( sub( secs(), %qt ), u( d.pose.time ) ),
+					@@( if not connected or if idle wipe )
 				),
-				wipe( %qr/d.pose.*.%qp ) )
+				wipe( %0/## )
 			)
-		),
-	)
-			
+		)
+	
 
 @@ write something so that if you leave the room it doesn't ping you!	
 	
 &trig.pose.alert [v( d.pom )]=
 	th strcat(
-		setq( o, u( f.order.poses, %0 ) ), @@( Grabs the list as time:#dbref space time:#dbref space etc),
-		setq( w, words( %qo ) ), @@( If there is only 1 person on the list, don't alert ),
-		setq( u, rest( first( %qo ), .) ), @@( list is from oldest to newest, oldest is now 'up' ),
-		setq( m, case( get( %qu/_POSE.ALERT ),
-			quiet, 1,
-			loud, 2,
-			0 )), @@( Players can have alerts quiet, loud, or off)
-		);
-	@if [or( 
+		setq( o, u( f.order.poses, %0 ) ), 
+		@@( Grabs the list as time:#dbref space time:#dbref space etc),
+		setq( w, words( %qo ) ), 
+		@@( If there is only 1 person on the list, don't alert ),
+		setq( u, rest( first( %qo ), . ) ), 
+		@@( list is from oldest to newest, oldest is now 'up' ),
+		setq( m, 
+			case( get( %qu/_POSE.ALERT ),
+				quiet, 1,
+				loud, 2,
+				0 
+			)
+		), 
+		@@( Players can have alerts quiet, loud, or off )
+	);
+	@if [cor( 
 			not( %qm ), 
 			eq( %qw, 1 ), 
-			not( match( loc( %qu ), %0 )))] 
-		= @@( Do Nothing, either only 1 person or alerts are off ),
-		@pemit %qu=[u( .msg, Pose Order, It is your turn to pose.)]
-		[if( eq( %qm, 2), strcat( %b, beep(), Beep!, @@( beep sends the sounds to the client) ) )];
+			not( match( loc( %qu ), %0 ) )
+		)] =
+		@@( Do Nothing, either only 1 person or alerts are off ),
+		@pemit %qu={
+			[u( .msg, Pose Order, It is your turn to pose.)]
+			[if( eq( %qm, 2 ), 
+				strcat( %b, 
+					beep(), 
+					Beep!, 
+					@@( beep sends the sounds to the client ) 
+				) 
+			)]
+			};
 
 		
 &display.pose.order [v( d.pom )]=
@@ -216,12 +245,14 @@ you can keep tinkering even if the object isn't in the room with you.
 			match( get( %0/_POSE.ORDER ), off ), strcat(
 				ljust( ,10), ljust( Pose Order tracking is currently [ansi( hr, OFF )]., 40 ), %r,
 				ljust( ,10), ljust( Staff or the room owner can turn it on., 40), %r%r ),
-			t( match( u( d.exclude.rooms ), %0 ) ), strcat(
+			cor( t( match( u( d.exclude.zones ), zone( %0 ) ) ),
+				t( match( u( d.exclude.rooms ), %0 ) ) ), 
+			strcat(
 				ljust( ,10), ljust( This room is [ansi( hr, excluded )] from pose tracking., 40 ), %r,
 				ljust( ,10), ljust( If it should be on%, please contact staff., 40), %r%r ),
 			not( %qo ), strcat(
 				ljust( ,10), ljust( No one has posed yet., 40 ), %r%r ),
-			strcat(	
+			strcat(	a
 				ljust( ,10), ljust( It is [ansi(hy, name(%qu)'s)] turn to pose., 30), %r%r,
 				ljust( ,10), ljust( %xhName%xn, 20), ljust( %xhLast%xn, 10), ljust( %xhIdle%xn, 10), %r,
 				iter( %qo, strcat(
@@ -240,10 +271,10 @@ you can keep tinkering even if the object isn't in the room with you.
 			),
 		if( get( %1/_POSE.ALERT ), strcat( 
 			ljust( ,10), Your alert is currently set to, %b,
-			ucstr( get( %1/_POSE.ALERT ) ), ., %r%r),
+			ucstr( get( %1/_POSE.ALERT ) ), ., %r%r ),
 			strcat( 
-				ljust( ,10), You do not have a pose alert set. See +poseorder/help. %r%r ))
-		)
+				ljust( ,10 ), You do not have a pose alert set. See +poseorder/help. %r%r ))
+	)
 
 /*
 
@@ -261,6 +292,7 @@ Options:
 * /here <on/off> : Staff or room owner can turn off poseorder for the room.
 * /exclude <here/dbref/!dbref> : Update the noposeorder object for rooms that should be excluded.
 * /skip <name> : Marks a person as having posed.
+* /remove <name> : Removes them from +poseorder
 
 */
 
@@ -330,8 +362,9 @@ Options:
 				set( %1, _POSE.ORDER:%qa ),
 				remit( %1, [u( .msg, Pose Order, Pose order tracking for this room is now [ucstr( %qa )]. )] ),
 				@@( Can only accept on or off. Must be staff or room owner. remit sends a message to whole room. )
-			) )
+			) 
 		)
+	)
 
 
 &c.poseorder.exclude [v( d.pom )]=
@@ -379,7 +412,7 @@ Options:
 		switch( 0,
 			t( pmatch( %qp ) ), 
 			u( .msg, Pose Order, %0 is not a valid player. ),
-			strmatch( lattr( %1/d.pose.* ), *%qp* ),
+			strmatch( u( f.order.poses, %1 ), *%qp* ),
 			u( .msg, Pose Order, [name(%qp)] has not posed in this room. ),
 			strcat( 
 				u( f.poseorder, %qp ),
@@ -398,13 +431,21 @@ Options:
 		switch( 0,
 			t( pmatch( %qp ) ), 
 			u( .msg, Pose Order, %0 is not a valid player. ),
-			strmatch( lattr( %1/d.pose.* ), *%qp* ),
+			strmatch( u( f.order.poses, %1 ), *%qp* ),
 			u( .msg, Pose Order, [name(%qp)] has not posed in this room. ),
 			strcat(
-				remit( %1, u( .msg, Pose Order, [name(%2)] has removed [name(%qp)]. )),
-				u( .msg, Pose Order, You remove [name(%qp)]. ),
-				[wipe( %1/d.pose.*.%qp )],
-				trigger( %!/trig.pose.alert, %1)
+				remit( %1, u( .msg, Pose Order, [ name( %2 ) ] has removed [name( %qp )]. )),
+				u( .msg, Pose Order, You remove [ name( %qp ) ]. ),
+				iter( 
+					lattr( %1/d.pose.* ), 
+					if( 
+						match( last( get( %1/## ), . ), %qp ), 
+						wipe( %1/## ) , 
+//						pemit( %#, %xhxr I think I should be wiping %ql/## ),
+						@@( do nothing )
+					) 
+				),
+				trigger( %!/trig.pose.alert, %1 )
 			)
 		)
 	)	
