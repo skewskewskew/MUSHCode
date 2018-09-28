@@ -48,6 +48,8 @@ Note: The reposer uses secure() on the incoming poses, because I had too many is
 
 &d.exclude.rooms [v( d.rr )]=@@( Adding this here so you know it's here. Code will set it when needed. )
 
+&d.exclude.zones [v( d.rr )]=@@( Adding this here so you know it's here. Code will set it when needed. )
+
 @@ Note: There's a feature that outputs use of the +repose command to a com channel.
 @@ The idea is that if anyone pops into your temp room and uses repose to "spy" on
 @@ you, staff will be able to see that. Below is the d.data that sets the name of the
@@ -110,6 +112,7 @@ which mostly means adding "Character says, "Stuff"." where necessary.
 	strcat(
 		setq( l, loc( %# ) ),
 		if( cor( 
+			match( u( d.exclude.zones ), zone( %ql ) ), @@( check exclude zones),
 			match( u( d.exclude.rooms ), %ql ), 
 // check exclude room list
 			match( get( %ql/_REPOSE ), off ), 
@@ -135,8 +138,8 @@ which mostly means adding "Character says, "Stuff"." where necessary.
 					u( f.format.repose, edit( trim( %qu ), %\, ), emit ) ) ) ),	
 // This long nasty bit tries to figure out how you posed. Ie, " or @em or etc
 			set( %ql, 
-				u( f.format.repose.attribute, %# ):
-				[u( f.format.repose.data, %qe )] )
+				u( f.format.repose.attribute ):
+				[u( f.format.repose.data )] )
 // add that you posed 
 				) 
 			)
@@ -155,53 +158,77 @@ which mostly means adding "Character says, "Stuff"." where necessary.
 
 @@ Everything has been ran through objeval, so stuff should be ok.
 @@ Still, for extra safety, I'm eating up [] if it's in your pose.
-&f.secure.pose [v( d.rr )]=edit( %0 , lit( [ ), , lit( ] ), )
+&f.secure.pose [v( d.rr )]=edit( %0 , lit( [ ), , lit( ] ), , `, ' )
 
-@@ how the attribute itself will appear
-@@ should look like d.repose.190328093.character
+@@ We're adding 1000 so the attribute will be 1001+, that makes it easier
+@@ To sort (because otherwise d.repose.1 d.repose.2 d.repose.10 ... it'll go 1 10 2		
 &f.format.repose.attribute [v( d.rr )]=
-	strcat( d., repose., secs()., %0 )
+	strcat( d., repose., inc( add( u( f.get.last ), 10000 ) ) )
 
-@@ Do I want to add more to the pose data?	
-&f.format.repose.data [v( d.rr )]=%0
+@@ Check all attributes for the #s, grab the last (highest)	
+&f.get.last [v( d.rr )]=
+	if(
+		lt( 
+			setr( 5,
+				sub( last( sort( 
+							iter( 
+								lattr( %ql/d.repose.* ), 
+								last( ##, . )
+							, , %b ), n ) )
+				, 10000 )
+			),
+			0
+		),
+		0,
+		%q5
+	)
+		
+	
+	
+	
+@@ So this looks like secs`dbref`pose
+&f.format.repose.data [v( d.rr )]=
+	strcat( secs(), `, %#, `, %qe )
 
 @@ Clearing the list! Clears after x minutes, or when the room is empty.
 
-@@ Puts poses in order, outputs: D.REPOSE.1498969875.#289~D.REPOSE.1498970182.#289
+@@ Puts poses in order, outputs: D.REPOSE.10001~D.REPOSE.10002
 	
-&f.order.poses [v( d.rr )]=sort( lattr( %0/d.repose.* ), , , ~)
+&f.order.poses [v( d.rr )]=
+	sort( lattr( %0/d.repose.* ) )
 
 @@ Searches for rooms with the d.repose.* attrib
 	
 &trig.find.old [v( d.rr )]=
-	th strcat(
-		setq( r, search( eroom=lattr( ##/d.repose.* ))),
-		iter( %qr, trigger( %!/trig.clear.old, ## ) )
-	)
+	@dol search( eroom=lattr( ##/d.repose.* ))=
+		@trig me/trig.sweep.idle=##
 
 @@ takes list of rooms and compares time stamp to current, wipes if
 @@ older than d.repose.preserve.
 @@ Also, if room is empty, wipes the "repose off" setting in temp rooms
-
+	
 &trig.clear.old [v( d.rr )]=
-	th strcat(
-		setq( r, %0 ),
-		setq( o, u( f.order.poses, %qr ) ),
-		iter( %qo, strcat(
-			setq( t, elements( ##, 3, . ) ), @@( Get the time. ),
-			setq( p, last( ##, . ) ), @@( Get the player dbref ),
-			if( gte( sub( secs(), %qt ), v( d.repose.preserve ) ),
-				wipe( %qr/d.repose.%qt.%qp ) )
-			), ~ ),
-		if( t( lcon( %qr, connect) ), 
-			@@( If occupied, do nothing ),
-			wipe( %qr/d.repose.* ) ),
-		if( cand( 
-				t( lcon( %qr, connect) ), 
-				not( hasattr( %qr, _REPOSE.TEMP ) ) ),
-			@@( If occupied and/or isn't a temp room, do nothing ),
-			wipe( %qr/_REPOSE* ) )
-	)
+	@dol lattr( %0/d.repose.* )=
+		th strcat(
+			setq( 1, secure( get( %0/## ) ) ),
+			setq( t, elements( %q1, 1, ` ) ),
+			setq( p, elements( %q1, 2, ` ) ),
+			if( 
+				cor(
+					not( match( lcon( %0, connect ), %qp ) ),
+					gte( sub( secs(), %qt ), u( d.repose.preserve ) ),
+					@@( if not connected or if idle wipe )
+				),
+				wipe( %0/## )
+			),
+			if( 
+				cand( 
+					t( lcon( %0, connect) ), 
+					not( hasattr( %0, _REPOSE.TEMP ) ) 
+				),
+				@@( If occupied and/or isn't a temp room, do nothing ),
+				wipe( %0/_REPOSE* ) )
+		)
 
 /*
 
@@ -217,7 +244,7 @@ Beth posed at 11:34
 
 	Beth says, "Thanks, me too."
 
-*/
+
 
 @@ @@@@@@@@@@@@@@@@
 @@ Output for the +repose command
@@ -228,45 +255,62 @@ Beth posed at 11:34
 
 // Input: Location (%0), Invoker (%1)
 // %qo should look like: D.REPOSE.1498968377.#1051~D.REPOSE.1498968998.#1051
-	
+*/	
+
 &disp.repose [v( d.rr )]=
-	strcat( @@( This pulls the list of reposers and displays it. Nbd.),
+	strcat( @@( This pulls the list of reposers and displays it. Nbd. ),
+		setq( l, %0 ), @@( the room # ),
 		case( 1, 
-			t( match( u( d.exclude.rooms ), %0 ) ), strcat(
-				ljust( ,10), ljust( This room is [ansi( hr, excluded )] from +repose., 60 ), %r,
-				ljust( ,10), ljust( If +repose should be on%, please contact staff., 60), %r%r ),
+			cor( t( match( u( d.exclude.zones ), zone( %0 ) ) ),
+				t( match( u( d.exclude.rooms ), %0 ) ) ), 
+			strcat(
+				ljust( , 10 ), 
+				ljust( This room is [ansi( hr, excluded )] from +repose., 60 ), %r,
+				ljust( , 10 ), 
+				ljust( If +repose should be on%, please contact staff., 60 ), %r%r ),
 // If it's excluded, exclude it.
 			and( 
 				strmatch( get( %0/_REPOSE ), off ), 
 				strmatch( get( %0/_REPOSE.TEMP ), temp) ),
 			strcat(
-				ljust( ,10), ljust( Repose is [ansi( hr, temporarily off, n, . )] , 60 ), %r, ),
+				ljust( ,10 ), ljust( Repose is [ansi( hr, temporarily off, n, . )] , 60 ), %r, ),
 // Display temporary off-ness
 			strmatch( get( %0/_REPOSE ), off ), 
 			strcat(
-				ljust( ,10), ljust( The owner of this room has turned +repose [ansi( hr, off, n, . )] , 60 ), %r, ),
+				ljust( , 10 ), 
+				ljust( The owner of this room has turned +repose [ansi( hr, off, n, . )] , 60 ), %r, 
+			),
 // If it's on, check if any poses. If so, display.
 			strcat(
 					setq( o, u( f.order.poses, %0 ) ),
-					if( not( %qo ), strcat(
-						ljust( ,10), ljust( No one has posed yet., 40 ), %r%r ),
+					if( 
+						not( %qo ), 
+						strcat(
+							ljust( ,10 ), 
+							ljust( No one has posed yet., 40 ), 
+							%r%r 
+						),
 						u( disp.format.repose, %qo ) )
 					)
 			)
 	)
 
-
-// Input: D.REPOSE.1498968377.#1051~D.REPOSE.1498968998.#1051	
+// Input: D.REPOSE.10001 D.REPOSE.10002 D.REPOSE.10003 D.REPOSE.10004
 // Output: NAME posed at TIME: <pose> %r%r Output: NAME posed at TIME:...
 	
 &disp.format.repose [v( d.rr )]=
-		iter( %0, strcat(
-			setq( t, 
-				timefmt( $H:$M, elements( ##, 3, . ) ) ),
-			setq( p, last( ##, . ) ),
+		iter( %0, 
+			strcat(
+				setq( d, get( %ql/## ) ),
+				setq( t, 
+					timefmt( $H:$M, 
+						elements( secure( %qd ), 1, ` ) 
+					) 
+				),
+				setq( p, elements( secure( %qd ), 2, ` ) ),
 			%t%xh [name( %qp )] %xn,
 			posed at %qt:, %r%r,
-			get( loc( %# )/## ) ), ~, %r%r)
+			elements( %qd, 3, ` ) ), , %r%r )
 	
 
 /*

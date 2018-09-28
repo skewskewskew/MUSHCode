@@ -155,13 +155,20 @@ you can keep tinkering even if the object isn't in the room with you.
 
 @@ Check all attributes for the #s, grab the last (highest)	
 &f.get.last [v( d.pom )]=
-	last( 
-		sort( 
-			iter( 
-				lattr( %ql/d.pose.* ), 
-				last( ##, . )
-			, , %b )
-		, n )
+	if(
+		lt( 
+			setr( 5,
+				sub( last( sort( 
+							iter( 
+								lattr( %ql/d.pose.* ), 
+								last( ##, . )
+							, , %b ), n ) )
+				, 1000 )
+			),
+			0
+		),
+		0,
+		%q5
 	)
 	
 &f.format.pose.data 	[v( d.pom )]=
