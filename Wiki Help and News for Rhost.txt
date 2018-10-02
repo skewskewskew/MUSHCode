@@ -1,0 +1,577 @@
+/*
+Originally coded by Chime (lucca@accela.net)
+Rewritten and slightly ruined by Thenomain (thenomain@gmail.com)
+Rewritten, gutted, converted to Rhost by skew (https://github.com/skewskewskew)
+Commented for Muxify (http://muxify.serverglitch.net/editor.html)
+
+Released as-is without copyright or guarantee.
+
+Tested for: 
+	Rhost 4+
+	MediaWiki 1.20+
+
+Requires:
+	A game with In-Line/Synchronous SQL enabled
+	* see the `SQL` readme in your game folder
+	wheader(), wfooter(), wdivider()
+	
+Likes to have:
+	Thenomain's Code Object Data Parent
+
+* PLEASE READ THE SETUP HELP AT THE END *
+
+
+================================================================================
+== SETUP =======================================================================
+*/
+
+@create Wiki News and Help <wnh>=10
+@fo me=&d.wnh me=search( name=Wiki News and Help <wnh> )
+@set Wiki News and Help <wnh>=INHERIT SAFE
+
+@Desc Wiki News and Help <wnh>=
+	Code for retrieving +news and +help from the mediawiki db. 
+	This is intended for MediaWiki 1.20 and is probably not portable for newer 
+	versions.
+
+@fo me=@parent [v( d.wnh )]=search( object=Code Object Data Parent )
+&prefix.queries [v( d.wnh )]=query.
+&prefix.wiki_formatters [v( d.wnh )]=wiki.
+&prefix.displays [v( d.wnh )]=display.
+&prefix.namespaces [v( d.wnh )]=namespace.
+&prefix.commands [v( d.wnh )]=c. cmd.
+
+@if strmatch( sql( SELECT 1 ), lit( sql( SELECT 1 )))=
+	think ansi( r, SQL was not compiled! Please re-compile the game with SQL. )
+
+
+/* 
+================================================================================
+== DATA ========================================================================
+*/
+
+
+// UN-COMMENT IF YOUR WIKI HAS A PREFIX
+// @vz [v( d.wnh )]=wiki_
+
+@if strmatch( sql( SELECT * FROM %vzpage ), lit( #-1 QUERY ERROR ))=
+	think ansi( 
+		r, I can't find the table '%vzpage'%; check your prefix! %(@vz%) 
+	)
+
+
+/* 
+================================================================================
+== FUNCTIONS ===================================================================
+*/
+
+// -----------------------------------------------------------------------------
+// -- Simple/Cross-Platform Functions ------------------------------------------
+
+&.msg [v( d.wnh )]=ansi( h, <%0>, n, %b%1 )
+&.wheader [v( d.wnh )]=wheader( %0 )
+&.wfooter [v( d.wnh )]=wfooter( %0 )
+&.wdivider [v( d.wnh )]=wdivider( %0 )
+
+
+// -----------------------------------------------------------------------------
+// -- Clean the Query ----------------------------------------------------------
+// 0: namespace id
+// 1: entry name
+
+&f.clean.query [v( d.wnh )]=
+	pedit( 
+		sql( u( query.newshelp, %0, %1 ), %r, ^ ), 
+		\%, \\\%, 
+		\[\[News:, \%xhnews%b, 
+		\[\[Help:, \%xh+help%b, 
+		\[\[Category:, Category:%b,
+		\]\], \%xn, 
+		\[, \\\[, 
+		\], \\\] 
+	)
+
+// --
+// think u( v( d.wnh )/f.clean.query, 3022, vitae )
+
+
+/*
+================================================================================
+== QUERIES: THE SQL STATEMENTS =================================================
+*/
+
+
+// -----------------------------------------------------------------------------
+// -- All categories used in a namespace ---------------------------------------
+// 
+// 0: Namespace number
+
+&query.categories-in-namespace [v( d.wnh )]=
+	SELECT DISTINCT cat_title 
+	FROM %vzcategory 
+	INNER JOIN %vzcategorylinks 
+		ON cat_title = cl_to 
+	INNER JOIN %vzpage 
+		ON cl_from = page_id 
+	WHERE page_namespace = %0; 
+
+// --
+// 
+// think sql( u( v( d.wnh )/query.categories-in-namespace, 3022 ))
+// think sql( u( v( d.wnh )/query.categories-in-namespace, 3020 ))
+
+// -----------------------------------------------------------------------------
+// -- All pages used in a namespace ---------------------------------------
+// 
+// 0: Namespace number
+
+&query.pages-in-namespace [v( d.wnh )]=
+	SELECT page_title 
+	FROM %vzpage 
+	WHERE page_namespace = %0; 
+
+// --
+// 
+// think sql( u( v( d.wnh )/query.pages-in-namespace, 3022 ))
+// think sql( u( v( d.wnh )/query.pages-in-namespace, 3020 ))
+
+// -----------------------------------------------------------------------------
+// -- All pages in a namespace with a specific category ------------------------
+// 
+// 0: Namespace number
+// 1: Category_Name (must be exact)
+
+&query.pages-in-category [v( d.wnh )]=
+	SELECT page_title 
+	FROM %vzpage 
+	INNER JOIN %vzcategorylinks 
+		ON cl_from = page_id 
+	WHERE page_namespace = %0 
+		AND cl_to='%1';
+
+// --
+// 
+// think sql( u( v( d.wnh )/query.pages-in-category, 3022, Game_Policy ))
+// think sql( u( v( d.wnh )/query.pages-in-category, 3022, News ))
+
+
+// -----------------------------------------------------------------------------
+// -- Get a wiki page & text ---------------------------------------------------
+// 
+// 
+// SELECT  *
+// FROM    trees
+// WHERE   trees.`title` COLLATE UTF8_GENERAL_CI LIKE '%elm%'
+// 
+// 0: Namespace number
+// 1: Page Title
+
+&query.newshelp [v( d.wnh )]=
+	SELECT page_title, UNIX_TIMESTAMP( page_touched ), old_text 
+	FROM %vzpage 
+		INNER JOIN %vzrevision ON page_latest=rev_id 
+		INNER JOIN %vztext ON rev_text_id=old_id 
+	WHERE page_namespace=%0 
+		AND CONVERT( page_title USING UTF8 ) COLLATE UTF8_GENERAL_CI LIKE '%1'
+
+// --
+// 
+// think first( sql( u( v( d.wnh )/query.newshelp, 3022, viTAe ), | ), | )
+
+
+/*
+================================================================================
+=== Regex Matching and Searching ===============================================
+
+Rhost stuff. Goal here is simple: Partial completes and spell checking on input
+
+Logic:
+
+First, match with a simple grab( list, word* ). This is "autocomplete".
+Second, look for the whole word via grab( list, *word* ). This is what I'm
+	calling "matching".
+Third, use strdistance() to match close matches.
+
+2 and 3 are in this order because Nic says `+help fail` should match
+	ofail before it matches mail. Blame her.
+
+Input:
+0: Word you input
+
+Output:
+p: correct name (if any)
+q: possible other matches
+
+*/
+
+&f.match.page [v( d.wnh )]=
+	[ setq( a,
+		grab( 
+			setr( l, sql( u( query.pages-in-namespace, %1 ), | ) )
+			, %0*, | )
+	)]
+	[ setq( f,
+		grab( 
+			setr( l, %ql )
+			, *%0*, | )
+	)]
+	[ null( 
+		iter( 
+			%ql, 
+			ifelse( lte( setr( z, strdistance( %i0, %0, , 1 ) ), 3 ), 
+				setq( %qz, [ r( %qz ) ] %i0 ) 
+				), 
+			| 
+		) 
+	) ]
+	[ extract( 
+		trim( 
+			squish( 
+				listunion( %qa|%qf|%q1|%q2|%q3, , |, |, 0 ) 
+			)
+		, b )
+	, 1, 4, | )]
+
+
+/* 
+================================================================================
+== FILTERS =====================================================================
+*/
+
+// -----------------------------------------------------------------------------
+// -- Filter out text ending in _<number> --------------------------------------
+// 
+// Sometimes we don't want to list the other pages of a help or news file.
+// 0: list
+// --
+
+&filter.no-_num [v( d.wnh )]=not( isint( last( %0, _ )))
+
+
+
+/*
+================================================================================
+== COMMANDS ====================================================================
+*/
+
+
+// -----------------------------------------------------------------------------
+// -- News/Help ----------------------------------------------------------------
+// 
+// This needs cleaned up desperately.
+// 
+// 1: news or +help?
+// 2: garbage giving option for no %3
+// 3: which file, if any, to look up
+// 
+// q1: wiki page contents: <title>^<timestamp>^<content>
+// q2: wikipage title
+// 
+// n: namespace
+// z: garbage
+// a: first character in a line
+// b: rest of the line
+// -- 
+
+&CMD.WIKI.NEWSHELP [v( d.wnh )]=
+	$^(\+?news|\+help)( ([- !(),./;?_A-Za-z0-9]+))?$:
+
+	@assert sql( select 1 )={ 
+		@pemit %#=u( .msg, %1, SQL connection is down%; cannot access the wiki )
+	}; 
+
+	@break eq( strlen( %3 ), 0 )={ 
+		@pemit %#=u( display.index, trim( %1, l, + ))
+	}; 
+
+	think strcat( 
+
+		qn:%b, setr( n, v( namespace.[trim( %1, l, + )] )), %r, 
+		qr:%b, setr( r, u( f.match.page, pedit( %3, %b, _ ), %qn ) ), %r, 
+		q1:%b, setr( 1, u( f.clean.query, %qn, first( %qr, | ))), %r, 
+		qt:%b, setr( t, pedit( first( %q1, ^ ), _, %b )), %r, 
+		qm:%b, setr( m, elementsmux( %q1, 2, ^ )), %r, 
+		qc:%b, setr( c, regeditall( elementsmux( %q1, 3, ^ ), %(%\r%\n%\t|%\n|%\r%\t%)+, | ) ), %r, 
+		wdivider(), %r, 
+	); 
+
+	@assert t( %q1 )={ 
+		@pemit %#=u( .msg, lcstr( %1 ), Unknown page. ) 
+	}; 
+
+	@pemit %#=
+		[u( .wheader, cat( capstr( lcstr( trim( %1, l, + ))), for %qt ))]%r; 
+
+//	@pemit %#=
+	think setr( 9,
+		s( 
+			iter( 
+				trim( 
+					escapex(  %qc , f a ),
+					b, 
+					[lit( %r )]
+				),
+				[setq( z, regmatch( [trim( %i0, l, r )], \\(.\\)\\(.*\\), z a b ))]
+				[setq( b, s( %qb ))]
+				[case( %qa, 
+					:, 
+					translate( u( wiki.block-quote, %qb ), p ), 
+
+					%b, 
+					translate( u( wiki.block-quote, trim( %qb )), p ), 
+
+					%;, 
+					translate( u( wiki.definition-block, %qb ), p ), 
+
+					*, 
+					translate( u( wiki.bullet-point, %qb ), p ), 
+
+					-, 
+					if( 
+						strmatch( %i0, ---- ), 
+						u( wiki.horizontal-rule ), 
+						%i0 
+					), 
+
+					=, 
+					if( 
+						regmatch( %i0, \\(=+\\)\\(.*?\\)\\(=+\\), z y x w ), 
+						strcat( 
+							translate( 
+								udefault( 
+									wiki.h[strlen( %qy )], 
+									u( wiki.h5, trim( %qx )), 
+									trim( %qx )), 
+								p 
+							), 
+							%xn 
+						)
+					), 
+
+					', 
+					if( 
+						regmatch( %i0, (''+)(.*?)(\\1)(.*), z y x w v ), 
+						switch( strlen( %qy ), 
+							<3, 
+							[translate( u( wiki.italics, %qx ), p )]
+							%xn%qv, 
+
+							<5, 
+							[translate( u( wiki.bold, %qx ), p )]
+							%xn%qv, 
+
+							<6, 
+							[translate( u( wiki.bold-italics, %qx ), p )]
+							%xn%qv, 
+
+							%i0 
+						), 
+						%i0 
+					), 
+					
+					, %%b, 
+					%i0 
+				)]
+				%%xn, 
+
+				|, 
+				lit( %r )
+
+			)
+		) ); 
+
+	@pemit %#=edit( edit( %q9, %%, % ), Category, %rCategory );
+	
+	@if t( rest( %qr, | ) )={ %ch%ccSuggested: 
+		%cw[elist( %qr, or, | )] };
+	
+	@pemit %#={ %r[u( .wfooter, u( display.footer, %qm ) ) ] }; 
+
+// --
+
+@set Wiki News and Help <wnh>/CMD.WIKI.NEWSHELP = regexp
+
+/*
+// -----------------------------------------------------------------------------
+// -- Recent Changes -----------------------------------------------------------
+
+The original code used to track recent changes and output them onto the MUX.
+
+I don't like it. The code was difficult. I have gutted that bit of it.
+
+~skew
+*/
+
+
+
+
+/*
+================================================================================
+== DISPLAYS ====================================================================
+*/
+
+// -----------------------------------------------------------------------------
+// -- Display Title ------------------------------------------------------------
+
+&display.title Wiki News and Help <wnh>=pedit( capstr( lcstr( %0 )), %b, _ )
+
+// -----------------------------------------------------------------------------
+// -- Display 'Last Modified' for Footer ---------------------------------------
+// 
+// 0: modified, in seconds
+
+&display.footer Wiki News and Help <wnh>=
+	strcat( 
+		File updated on:%b, ptimefmt( $Y-$m-$d $H:$M, [trunc( %0 )] )
+	)
+
+
+// -----------------------------------------------------------------------------
+// -- Display Index ------------------------------------------------------------
+// 
+// 0: namespace
+// 
+// t: total number of entries found
+// n: namespace id
+// c: categories in namespace
+// p: pages in category 
+
+&display.index [v( d.wnh )]=
+	localize( strcat( 
+		setq( t, 0 ), 
+		setq( n, v( namespace.[trim( %0, l, + )] )), 
+		setq( c, sort( sql( u( query.categories-in-namespace, %qn )))), 
+		u( .wheader, ucstr( %0 )), %r, 
+		iter( %qc, 
+			strcat( 
+				setq( p, 
+					sort( sql( u( query.pages-in-category, %qn, %i0 )))
+				), 
+				setq( t, add( %qt, words( %qp ))), 
+				iter( %qp, setq( m, max( strlen( %i0 ), %qm )), , @@() ), 
+				u( .wdivider, pedit( %i0, _, %b )), %r, 
+				pedit( 
+					table( 
+						%qp, 
+						inc( %qm ), 
+						width( %# )
+					), 
+					_, %b 
+				)
+			), 
+			, %r 
+		), %r, 
+		u( .wfooter, %qt entries )
+	))
+
+// --
+// think u( v( d.wnh )/display.index, v( namespace.[trim( %0, l, + )] ) )
+// think u( v( d.wnh )/display.index, help )
+
+
+
+
+/*
+================================================================================
+== NAMESPACES ==================================================================
+*/
+
+&namespace.1 Wiki News and Help <wnh>=Talk
+&namespace.2 Wiki News and Help <wnh>=User
+&namespace.3 Wiki News and Help <wnh>=User talk
+&namespace.4 Wiki News and Help <wnh>=ReachWiki
+&namespace.5 Wiki News and Help <wnh>=ReachWiki talk
+&namespace.6 Wiki News and Help <wnh>=File
+&namespace.7 Wiki News and Help <wnh>=File talk
+&namespace.8 Wiki News and Help <wnh>=MediaWiki
+&namespace.9 Wiki News and Help <wnh>=MediaWiki talk
+&namespace.10 Wiki News and Help <wnh>=Template
+&namespace.11 Wiki News and Help <wnh>=Template talk
+// &namespace.12 Wiki News and Help <wnh>=Help
+// &namespace.13 Wiki News and Help <wnh>=Help talk
+&namespace.14 Wiki News and Help <wnh>=Category
+&namespace.15 Wiki News and Help <wnh>=Category talk
+&namespace.3000 Wiki News and Help <wnh>=Logs
+&namespace.3001 Wiki News and Help <wnh>=Logs talk
+&namespace.3020 Wiki News and Help <wnh>=Help
+&namespace.3021 Wiki News and Help <wnh>=Help talk
+&namespace.3022 Wiki News and Help <wnh>=News
+&namespace.3023 Wiki News and Help <wnh>=News talk
+&namespace.HELP Wiki News and Help <wnh>=3020
+&namespace.NEWS Wiki News and Help <wnh>=3022
+
+
+
+/*
+================================================================================
+== WIKI FORMATTING =============================================================
+*/
+
+// Bold & Italics must be the first thing on the line, 
+// else it will be ignored.
+
+&wiki.block-quote Wiki News and Help <wnh>=wrap( %0, sub( width( %# ), 8 ), left, space( 4 ))
+&wiki.H1 Wiki News and Help <wnh>=divider( %0 )
+&wiki.H2 Wiki News and Help <wnh>=center( ansi( h, %0 ), width( %# ))
+&wiki.H3 Wiki News and Help <wnh>=center( ansi( h, %0 ), width( %# ))
+&wiki.H4 Wiki News and Help <wnh>=ansi( h, %0 )
+&wiki.H5 Wiki News and Help <wnh>=ansi( h, %0 )
+&wiki.definition-block Wiki News and Help <wnh>=wrap( [ansi( h, trim( first( %0, : )))] [if( strlen( trim( rest( %0, : ))), %r[trim( rest( %0, : ))] )], sub( width( %# ), 8 ), left, , , 4 )
+&wiki.bullet-point Wiki News and Help <wnh>=wrap( * [trim( %0 )], sub( width( %# ), 8 ), left, , , 2 )
+&wiki.bold Wiki News and Help <wnh>=ansi( h, %0 )
+&wiki.italics Wiki News and Help <wnh>=ansi( u, %0 )
+&wiki.bold-italics Wiki News and Help <wnh>=u( wiki.italics, u( wiki.bold, %0 ))
+
+
+/* 
+================================================================================
+== SETUP HELP ==================================================================
+
+You must be able to change, or access, the MediaWiki `LocalSettings.php` file
+and make the following additions. You may notice that I have turned off 
+talk/discussion pages for help and news.
+
+The namespace IDs are already in the code above, so if you change them you 
+MUST change &namespace.news and &namespace.help.
+
+Once LocalSettings.php is changed, nothing else needs to be done.
+
+
+--------------------------------------------------------------------------------
+-- LocalSettings.php -----------------------------------------------------------
+
+# ########################################################################
+# Custom Namespace: Game Help
+define("NS_GAMEHELP", 3020);
+$wgExtraNamespaces[NS_GAMEHELP] = "Gamehelp";
+# define("NS_GAMEHELP_TALK", 3021);
+# $wgExtraNamespaces[NS_GAMEHELP_TALK] = "Gamehelp_talk";
+$wgContentNamespaces[] = 3020;
+$wgNamespacesToBeSearchedDefault[NS_GAMEHELP] = true;
+
+
+# ########################################################################
+# Custom Namespace: Game News
+define( "NS_GAMENEWS", 3022 );
+$wgExtraNamespaces[NS_GAMENEWS] = "Gamenews";
+# define( "NS_GAMENEWS_TALK", 3023 );
+# $wgExtraNamespaces[NS_GAMENEWS_TALK] = "Gamenews_talk";
+$wgContentNamespaces[] = 3022;
+$wgNamespacesToBeSearchedDefault[NS_GAMENEWS] = true;
+
+
+
+================================================================================
+== USAGE HELP ==================================================================
+
+	+help
+	+help <entry>
+	news
+	news <entry>
+
+You may also use '+news' if you are used to that, but the system will report 
+and encourage you to use 'news' instead.
+
+Currently you must type the entire help or news entry name in order to read it.
+
+If the wiki entry doesn't have a [[Category:...]], it won't be listed.
