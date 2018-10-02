@@ -128,7 +128,8 @@ Likes to have:
 &query.pages-in-namespace [v( d.wnh )]=
 	SELECT page_title 
 	FROM %vzpage 
-	WHERE page_namespace = %0; 
+	WHERE page_namespace = %0
+	ORDER BY page_title;
 
 // --
 // 
