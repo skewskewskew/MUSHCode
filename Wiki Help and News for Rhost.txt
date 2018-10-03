@@ -128,7 +128,7 @@ Likes to have:
 &query.pages-in-namespace [v( d.wnh )]=
 	SELECT page_title 
 	FROM %vzpage 
-	WHERE page_namespace = %0
+	WHERE page_namespace = %0 
 	ORDER BY page_title;
 
 // --
@@ -228,7 +228,7 @@ q: possible other matches
 	[ extract( 
 		trim( 
 			squish( 
-				listunion( %qa|%qf|%q1|%q2|%q3, , |, |, 0 ) 
+				listunion( edit( %qa|%qf|%q1|%q2|%q3, %b, ), , |, |, 0 ) 
 			)
 		, b )
 	, 1, 4, | )]
@@ -383,8 +383,9 @@ q: possible other matches
 
 	@pemit %#=edit( edit( %q9, %%, % ), Category, %rCategory );
 	
-	@if t( rest( %qr, | ) )={ %ch%ccSuggested: 
-		%cw[elist( %qr, or, | )] };
+	@if t( setr( 3, rest( %qr, | ) ) )=
+		@pemit %#={ %r%ch%ccOther Suggestions: 
+		%cw[elist( %q3, or, | )] };
 	
 	@pemit %#={ %r[u( .wfooter, u( display.footer, %qm ) ) ] }; 
 
