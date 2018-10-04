@@ -198,6 +198,7 @@ Third, use strdistance() to match close matches.
 
 Input:
 0: Word you input
+1: Namespace
 
 Output:
 p: correct name (if any)
@@ -220,7 +221,7 @@ q: possible other matches
 		iter( 
 			%ql, 
 			ifelse( lte( setr( z, strdistance( %i0, %0, , 1 ) ), 3 ), 
-				setq( %qz, [ r( %qz ) ] %i0 ) 
+				setq( %qz, [ r( %qz ) ]|%i0 ) 
 				), 
 			| 
 		) 
@@ -231,7 +232,7 @@ q: possible other matches
 				listunion( edit( %qa|%qf|%q1|%q2|%q3, %b, ), , |, |, 0 ) 
 			)
 		, b )
-	, 1, 4, | )]
+	, 1, 3, | )]
 
 
 /* 
@@ -285,6 +286,7 @@ q: possible other matches
 		@pemit %#=u( display.index, trim( %1, l, + ))
 	}; 
 
+//	@pemit %#=strcat(	
 	think strcat( 
 
 		qn:%b, setr( n, v( namespace.[trim( %1, l, + )] )), %r, 
@@ -303,25 +305,32 @@ q: possible other matches
 	@pemit %#=
 		[u( .wheader, cat( capstr( lcstr( trim( %1, l, + ))), for %qt ))]%r; 
 
-//	@pemit %#=
+//	@pemit %#=setr( 9,
 	think setr( 9,
 		s( 
 			iter( 
 				trim( 
-					escapex(  %qc , f a ),
+//					escapex(  %qc , f a ),
+					%qc,
 					b, 
 					[lit( %r )]
 				),
 				[setq( z, regmatch( [trim( %i0, l, r )], \\(.\\)\\(.*\\), z a b ))]
 				[setq( b, s( %qb ))]
 				[case( %qa, 
+					<,
+					if( 
+						match( %qb, br> ), 
+						@@( without something the linebreak is ignored )
+					),
+					
 					:, 
 					translate( u( wiki.block-quote, %qb ), p ), 
 
 					%b, 
 					translate( u( wiki.block-quote, trim( %qb )), p ), 
 
-					%;, 
+					\;, 
 					translate( u( wiki.definition-block, %qb ), p ), 
 
 					*, 
@@ -384,7 +393,7 @@ q: possible other matches
 	@pemit %#=edit( edit( %q9, %%, % ), Category, %rCategory );
 	
 	@if t( setr( 3, rest( %qr, | ) ) )=
-		@pemit %#={ %r%ch%ccOther Suggestions: 
+		@pemit %#={ %r %ch %cc Other Possible Input Matches: 
 		%cw[elist( %q3, or, | )] };
 	
 	@pemit %#={ %r[u( .wfooter, u( display.footer, %qm ) ) ] }; 
@@ -519,7 +528,7 @@ I don't like it. The code was difficult. I have gutted that bit of it.
 &wiki.H4 Wiki News and Help <wnh>=ansi( h, %0 )
 &wiki.H5 Wiki News and Help <wnh>=ansi( h, %0 )
 &wiki.definition-block Wiki News and Help <wnh>=wrap( [ansi( h, trim( first( %0, : )))] [if( strlen( trim( rest( %0, : ))), %r[trim( rest( %0, : ))] )], sub( width( %# ), 8 ), left, , , 4 )
-&wiki.bullet-point Wiki News and Help <wnh>=wrap( * [trim( %0 )], sub( width( %# ), 8 ), left, , , 2 )
+&wiki.bullet-point Wiki News and Help <wnh>=%b%b[wrap( • [trim( %0 )], sub( width( %# ), 8 ), left )]
 &wiki.bold Wiki News and Help <wnh>=ansi( h, %0 )
 &wiki.italics Wiki News and Help <wnh>=ansi( u, %0 )
 &wiki.bold-italics Wiki News and Help <wnh>=u( wiki.italics, u( wiki.bold, %0 ))
