@@ -60,7 +60,7 @@ Note: The reposer uses secure() on the incoming poses, because I had too many is
 
 @@ For the hook object...
 
-@edit [v( d.ho )]/B_POSE = $, [u( [v( d.rr )]/f.capture.pose, %m )]]
+@edit [v( d.ho )]/B_POSE = $, [u( [v( d.rr )]/f.capture.pose, %m )]
 @edit [v( d.ho )]/B_POSE/NOSPACE = $, [u( [v( d.rr )]/f.capture.pose, %m )]
 @edit [v( d.ho )]/B_NPOSE = $, [u( [v( d.rr )]/f.capture.pose, %m )]
 @edit [v( d.ho )]/B_SAY = $, [u( [v( d.rr )]/f.capture.pose, %m )]
