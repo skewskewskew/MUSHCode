@@ -201,7 +201,7 @@ which mostly means adding "Character says, "Stuff"." where necessary.
 	
 &trig.find.old [v( d.rr )]=
 	@dol search( eroom=lattr( ##/d.repose.* ))=
-		@trig me/trig.sweep.idle=##
+		@trig me/trig.clear.old=##
 
 @@ takes list of rooms and compares time stamp to current, wipes if
 @@ older than d.repose.preserve.
